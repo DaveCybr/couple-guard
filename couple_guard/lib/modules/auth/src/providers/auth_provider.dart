@@ -3,6 +3,9 @@ import 'package:flutter/foundation.dart';
 import '../services/auth_service.dart';
 import '../models/user_model.dart';
 import '../storages/secure_storage.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:io';
+import 'package:firebase_auth/firebase_auth.dart';
 
 enum AuthStatus { initial, loading, authenticated, unauthenticated }
 
@@ -56,20 +59,49 @@ class AuthProvider with ChangeNotifier {
   Future<bool> login(String email, String password) async {
     _setLoading(true);
     try {
-      final authResult = await _authService.login(email, password);
-      if (authResult.success) {
-        _token = authResult.token;
-        _user = authResult.user;
+      // Login ke Firebase
+      UserCredential userCredential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(email: email, password: password);
+
+      User? firebaseUser = userCredential.user;
+
+      if (firebaseUser != null) {
+        // Buat UserModel dari Firebase user
+        _user = UserModel(
+          id: firebaseUser.uid.hashCode, // karena di Firebase ga ada int id
+          name: firebaseUser.displayName ?? '',
+          email: firebaseUser.email ?? '',
+          phone: firebaseUser.phoneNumber,
+          avatar: firebaseUser.photoURL,
+          isEmailVerified: firebaseUser.emailVerified,
+          partnerId: null,
+          partnerName: null,
+          createdAt: firebaseUser.metadata.creationTime ?? DateTime.now(),
+          updatedAt: firebaseUser.metadata.lastSignInTime ?? DateTime.now(),
+        );
+
+        _token = await firebaseUser.getIdToken();
         _status = AuthStatus.authenticated;
-        await _secureStorage.saveToken(authResult.token!);
-        await _secureStorage.saveUser(authResult.user!);
+
+        // simpan ke storage lokal
+        await _secureStorage.saveToken(_token!);
+        await _secureStorage.saveUser(_user!);
+
         notifyListeners();
         return true;
       }
       return false;
-    } catch (e) {
-      debugPrint('Login error: $e');
-      return false;
+    } on FirebaseAuthException catch (e) {
+      debugPrint("🔥 FirebaseAuthException: ${e.code} | ${e.message}");
+      if (e.code == 'user-not-found') {
+        throw ('User tidak ditemukan');
+      } else if (e.code == 'wrong-password') {
+        throw ('Password salah');
+      } else if (e.code == 'invalid-email') {
+        throw ('Format email tidak valid');
+      } else {
+        throw ('Error Firebase: ${e.code} - ${e.message}');
+      }
     } finally {
       _setLoading(false);
     }
@@ -78,10 +110,47 @@ class AuthProvider with ChangeNotifier {
   Future<bool> register(String name, String email, String password) async {
     _setLoading(true);
     try {
-      final result = await _authService.register(name, email, password);
-      return result.success;
+      // register ke firebase
+      UserCredential userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(email: email, password: password);
+
+      User? user = userCredential.user;
+
+      if (user != null) {
+        // update displayName biar nama tersimpan di firebase
+        await user.updateDisplayName(name);
+        await user.reload();
+
+        // mapping Firebase User -> UserModel
+        _user = UserModel(
+          id: 0, // karena Firebase tidak pakai integer ID, bisa isi default
+          name: user.displayName ?? name,
+          email: user.email ?? email,
+          phone: user.phoneNumber,
+          avatar: user.photoURL,
+          isEmailVerified: user.emailVerified,
+          partnerId: null,
+          partnerName: null,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+
+        _token = await user.getIdToken();
+
+        // simpan ke storage lokal
+        await _secureStorage.saveToken(_token!);
+        await _secureStorage.saveUser(_user!);
+
+        notifyListeners();
+        return true;
+      }
+
+      return false;
+    } on FirebaseAuthException catch (e) {
+      print("FirebaseAuth Error: ${e.code} - ${e.message}");
+      return false;
     } catch (e) {
-      debugPrint('Register error: $e');
+      print("Unexpected Error: $e");
       return false;
     } finally {
       _setLoading(false);

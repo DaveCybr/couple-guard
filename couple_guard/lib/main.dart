@@ -12,10 +12,10 @@ import 'modules/auth/src/services/auth_service.dart';
 import 'modules/auth/src/storages/secure_storage.dart';
 
 void main() async {
-  // WidgetsFlutterBinding.ensureInitialized();
+  WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Firebase
-  // await Firebase.initializeApp();
+  await Firebase.initializeApp();
 
   // Initialize Notifications
   // await NotificationService.initialize();

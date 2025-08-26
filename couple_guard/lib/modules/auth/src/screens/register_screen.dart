@@ -1,4 +1,4 @@
-// lib/modules/auth/src/screens/login_screen.dart
+// lib/modules/auth/src/screens/register_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/routes/app_navigator.dart';
@@ -7,23 +7,24 @@ import '../providers/auth_provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/constants/app_constants.dart';
-// import 'package:firebase_auth/firebase_auth.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({Key? key}) : super(key: key);
+class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({Key? key}) : super(key: key);
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  State<RegisterScreen> createState() => _RegisterScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
+class _RegisterScreenState extends State<RegisterScreen>
     with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
 
   bool _isPasswordVisible = false;
-  bool _rememberMe = false;
+  bool _isConfirmPasswordVisible = false;
 
   late AnimationController _slideController;
   late AnimationController _fadeController;
@@ -70,29 +71,37 @@ class _LoginScreenState extends State<LoginScreen>
 
   @override
   void dispose() {
+    _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     _slideController.dispose();
     _fadeController.dispose();
     super.dispose();
   }
 
-  Future<void> _handleLogin() async {
+  Future<void> _handleRegister() async {
     if (!_formKey.currentState!.validate()) return;
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-    try {
-      await authProvider.login(
-        _emailController.text.trim(),
-        _passwordController.text,
-      );
+    final success = await authProvider.register(
+      _nameController.text.trim(),
+      _emailController.text.trim(),
+      _passwordController.text,
+    );
 
-      if (mounted && authProvider.isAuthenticated) {
-        AppNavigator.pushReplacement(AppRoutes.dashboard);
-      }
-    } catch (e) {
-      _showErrorSnackBar(e.toString());
+    if (!mounted) return;
+
+    if (success) {
+      // kalau langsung ke dashboard
+      AppNavigator.pushReplacement(AppRoutes.dashboard);
+
+      // atau kalau mau ke login dulu
+      // AppNavigator.pushReplacement(AppRoutes.login);
+    } else {
+      _showErrorSnackBar("Registration failed, please try again.");
+      
     }
   }
 
@@ -125,24 +134,16 @@ class _LoginScreenState extends State<LoginScreen>
 
               const SizedBox(height: 48),
 
-              // Login Form
-              FadeTransition(opacity: _fadeAnimation, child: _buildLoginForm()),
-
-              const SizedBox(height: 32),
-
-              // Social Login Options
+              // Register Form
               FadeTransition(
                 opacity: _fadeAnimation,
-                child: _buildSocialLogin(),
+                child: _buildRegisterForm(),
               ),
 
               const SizedBox(height: 24),
 
-              // Register Link
-              FadeTransition(
-                opacity: _fadeAnimation,
-                child: _buildRegisterLink(),
-              ),
+              // Login Link
+              FadeTransition(opacity: _fadeAnimation, child: _buildLoginLink()),
             ],
           ),
         ),
@@ -168,14 +169,14 @@ class _LoginScreenState extends State<LoginScreen>
               ),
             ],
           ),
-          child: const Icon(Icons.favorite, size: 40, color: AppColors.white),
+          child: const Icon(Icons.person_add, size: 40, color: AppColors.white),
         ),
 
         const SizedBox(height: 24),
 
         // Title
         Text(
-          'Welcome Back',
+          'Create Account',
           style: Theme.of(context).textTheme.headlineMedium?.copyWith(
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -186,7 +187,7 @@ class _LoginScreenState extends State<LoginScreen>
 
         // Subtitle
         Text(
-          'Sign in to continue to ${AppStrings.appName}',
+          'Sign up to get started with ${AppStrings.appName}',
           style: Theme.of(
             context,
           ).textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary),
@@ -195,7 +196,7 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  Widget _buildLoginForm() {
+  Widget _buildRegisterForm() {
     return Container(
       padding: const EdgeInsets.all(AppConstants.largePadding),
       decoration: BoxDecoration(
@@ -213,26 +214,37 @@ class _LoginScreenState extends State<LoginScreen>
         key: _formKey,
         child: Column(
           children: [
-            // Email Field
+            _buildNameField(),
+            const SizedBox(height: AppConstants.defaultPadding),
             _buildEmailField(),
-
             const SizedBox(height: AppConstants.defaultPadding),
-
-            // Password Field
             _buildPasswordField(),
-
             const SizedBox(height: AppConstants.defaultPadding),
-
-            // Remember Me & Forgot Password
-            _buildRememberMeRow(),
-
+            _buildConfirmPasswordField(),
             const SizedBox(height: AppConstants.largePadding),
-
-            // Login Button
-            _buildLoginButton(),
+            _buildRegisterButton(),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildNameField() {
+    return TextFormField(
+      controller: _nameController,
+      decoration: InputDecoration(
+        labelText: 'Full Name',
+        prefixIcon: const Icon(Icons.person_outline),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
+        ),
+      ),
+      validator: (value) {
+        if (value == null || value.isEmpty) {
+          return AppStrings.fieldRequired;
+        }
+        return null;
+      },
     );
   }
 
@@ -242,27 +254,15 @@ class _LoginScreenState extends State<LoginScreen>
       keyboardType: TextInputType.emailAddress,
       decoration: InputDecoration(
         labelText: AppStrings.email,
-        hintText: 'Enter your email',
         prefixIcon: const Icon(Icons.email_outlined),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
-          borderSide: const BorderSide(color: AppColors.border),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
-          borderSide: const BorderSide(color: AppColors.primary, width: 2),
         ),
       ),
       validator: (value) {
         if (value == null || value.isEmpty) {
           return AppStrings.fieldRequired;
         }
-        // if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}).hasMatch(value)) {
-        //   return AppStrings.invalidEmail;
-        // }
         return null;
       },
     );
@@ -274,7 +274,6 @@ class _LoginScreenState extends State<LoginScreen>
       obscureText: !_isPasswordVisible,
       decoration: InputDecoration(
         labelText: AppStrings.password,
-        hintText: 'Enter your password',
         prefixIcon: const Icon(Icons.lock_outline),
         suffixIcon: IconButton(
           icon: Icon(
@@ -289,14 +288,6 @@ class _LoginScreenState extends State<LoginScreen>
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
-          borderSide: const BorderSide(color: AppColors.border),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
-          borderSide: const BorderSide(color: AppColors.primary, width: 2),
-        ),
       ),
       validator: (value) {
         if (value == null || value.isEmpty) {
@@ -310,58 +301,47 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  Widget _buildRememberMeRow() {
-    return Row(
-      children: [
-        // Remember Me Checkbox
-        Row(
-          children: [
-            Checkbox(
-              value: _rememberMe,
-              onChanged: (value) {
-                setState(() {
-                  _rememberMe = value ?? false;
-                });
-              },
-              activeColor: AppColors.primary,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-            const Text(
-              'Remember me',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
-            ),
-          ],
-        ),
-
-        const Spacer(),
-
-        // Forgot Password Link
-        TextButton(
-          onPressed: () {
-            Navigator.of(context).pushNamed('/auth/forgot-password');
-          },
-          child: const Text(
-            AppStrings.forgotPassword,
-            style: TextStyle(
-              color: AppColors.primary,
-              fontWeight: FontWeight.w500,
-            ),
+  Widget _buildConfirmPasswordField() {
+    return TextFormField(
+      controller: _confirmPasswordController,
+      obscureText: !_isConfirmPasswordVisible,
+      decoration: InputDecoration(
+        labelText: 'Confirm Password',
+        prefixIcon: const Icon(Icons.lock_outline),
+        suffixIcon: IconButton(
+          icon: Icon(
+            _isConfirmPasswordVisible ? Icons.visibility_off : Icons.visibility,
           ),
+          onPressed: () {
+            setState(() {
+              _isConfirmPasswordVisible = !_isConfirmPasswordVisible;
+            });
+          },
         ),
-      ],
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
+        ),
+      ),
+      validator: (value) {
+        if (value == null || value.isEmpty) {
+          return AppStrings.fieldRequired;
+        }
+        if (value != _passwordController.text) {
+          return "Passwords do not match";
+        }
+        return null;
+      },
     );
   }
 
-  Widget _buildLoginButton() {
+  Widget _buildRegisterButton() {
     return Consumer<AuthProvider>(
       builder: (context, authProvider, child) {
         return SizedBox(
           width: double.infinity,
           height: 56,
           child: ElevatedButton(
-            onPressed: authProvider.isLoading ? null : _handleLogin,
+            onPressed: authProvider.isLoading ? null : _handleRegister,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: AppColors.white,
@@ -383,7 +363,7 @@ class _LoginScreenState extends State<LoginScreen>
                       ),
                     )
                     : const Text(
-                      AppStrings.login,
+                      'Sign Up',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -395,97 +375,12 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  Widget _buildSocialLogin() {
-    return Column(
-      children: [
-        // Divider with "or"
-        Row(
-          children: [
-            const Expanded(child: Divider(color: AppColors.border)),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                'or continue with',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: AppColors.textTertiary),
-              ),
-            ),
-            const Expanded(child: Divider(color: AppColors.border)),
-          ],
-        ),
-
-        const SizedBox(height: 24),
-
-        // Social Login Buttons
-        Row(
-          children: [
-            // Google Login
-            Expanded(
-              child: _buildSocialButton(
-                icon: Icons.g_mobiledata,
-                label: 'Google',
-                onPressed: () {
-                  // TODO: Implement Google login
-                },
-              ),
-            ),
-
-            const SizedBox(width: 16),
-
-            // Apple Login
-            Expanded(
-              child: _buildSocialButton(
-                icon: Icons.apple,
-                label: 'Apple',
-                onPressed: () {
-                  // TODO: Implement Apple login
-                },
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSocialButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onPressed,
-  }) {
-    return OutlinedButton(
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        side: const BorderSide(color: AppColors.border),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: AppColors.textSecondary),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRegisterLink() {
+  Widget _buildLoginLink() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
-          AppStrings.dontHaveAccount,
+          "Already have an account?",
           style: Theme.of(
             context,
           ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
@@ -493,13 +388,10 @@ class _LoginScreenState extends State<LoginScreen>
         const SizedBox(width: 4),
         TextButton(
           onPressed: () {
-            Navigator.of(context).pushNamed('/auth/register');
+            Navigator.of(context).pushNamed('/auth/login');
           },
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          ),
           child: const Text(
-            AppStrings.signUp,
+            'Login',
             style: TextStyle(
               color: AppColors.primary,
               fontWeight: FontWeight.w600,

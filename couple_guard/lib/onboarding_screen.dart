@@ -1,7 +1,6 @@
 // lib/core/screens/onboarding_screen.dart
-import 'package:couple_guard/core/routes/app_navigator.dart';
 import 'package:flutter/material.dart';
-
+// FIXED: Import paths yang benar
 import 'core/constants/app_colors.dart';
 import 'core/constants/app_constants.dart';
 import 'core/constants/app_strings.dart';
@@ -86,10 +85,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _navigateToLogin() {
-    // FIXED: Gunakan Navigator.of(context) dengan route yang benar
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        AppNavigator.push(AppRoutes.login);
+    // FIXED: Gunakan Future.delayed untuk menghindari navigation lock
+    Future.delayed(Duration.zero, () {
+      if (mounted && Navigator.of(context).canPop() == false) {
+        try {
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            AppRoutes.login, // '/auth/login'
+            (route) => false,
+          );
+        } catch (e) {
+          debugPrint('Navigation error: $e');
+          // Fallback dengan delay lebih lama
+          Future.delayed(const Duration(milliseconds: 100), () {
+            if (mounted) {
+              Navigator.of(
+                context,
+              ).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
+            }
+          });
+        }
       }
     });
   }
