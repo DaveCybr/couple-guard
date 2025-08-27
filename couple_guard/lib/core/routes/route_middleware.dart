@@ -29,13 +29,15 @@ class _AuthRequiredRoute<T> extends PageRoute<T> {
   String? get barrierLabel => _route.barrierLabel;
 
   @override
-  bool get maintainState => _route.maintainState;
+  bool get maintainState => _route.maintainState ?? true;
 
   @override
-  Duration get transitionDuration => _route.transitionDuration;
+  Duration get transitionDuration =>
+      _route.transitionDuration ?? const Duration(milliseconds: 300);
 
   @override
-  Duration get reverseTransitionDuration => _route.reverseTransitionDuration;
+  Duration get reverseTransitionDuration =>
+      _route.reverseTransitionDuration ?? const Duration(milliseconds: 300);
 
   @override
   RouteSettings get settings => _route.settings;
@@ -47,12 +49,26 @@ class _AuthRequiredRoute<T> extends PageRoute<T> {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    return _route.buildTransitions(
-      context,
-      animation,
-      secondaryAnimation,
-      child,
-    );
+    // FIXED: Fallback ke default transition jika _route.buildTransitions null
+    try {
+      return _route.buildTransitions(
+        context,
+        animation,
+        secondaryAnimation,
+        child,
+      );
+    } catch (e) {
+      // Fallback ke slide transition default
+      return SlideTransition(
+        position: animation.drive(
+          Tween(
+            begin: const Offset(1.0, 0.0),
+            end: Offset.zero,
+          ).chain(CurveTween(curve: Curves.ease)),
+        ),
+        child: child,
+      );
+    }
   }
 
   @override
@@ -106,13 +122,15 @@ class _GuestOnlyRoute<T> extends PageRoute<T> {
   String? get barrierLabel => _route.barrierLabel;
 
   @override
-  bool get maintainState => _route.maintainState;
+  bool get maintainState => _route.maintainState ?? true;
 
   @override
-  Duration get transitionDuration => _route.transitionDuration;
+  Duration get transitionDuration =>
+      _route.transitionDuration ?? const Duration(milliseconds: 300);
 
   @override
-  Duration get reverseTransitionDuration => _route.reverseTransitionDuration;
+  Duration get reverseTransitionDuration =>
+      _route.reverseTransitionDuration ?? const Duration(milliseconds: 300);
 
   @override
   RouteSettings get settings => _route.settings;
@@ -124,12 +142,26 @@ class _GuestOnlyRoute<T> extends PageRoute<T> {
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    return _route.buildTransitions(
-      context,
-      animation,
-      secondaryAnimation,
-      child,
-    );
+    // FIXED: Fallback ke default transition jika _route.buildTransitions null
+    try {
+      return _route.buildTransitions(
+        context,
+        animation,
+        secondaryAnimation,
+        child,
+      );
+    } catch (e) {
+      // Fallback ke slide transition default
+      return SlideTransition(
+        position: animation.drive(
+          Tween(
+            begin: const Offset(1.0, 0.0),
+            end: Offset.zero,
+          ).chain(CurveTween(curve: Curves.ease)),
+        ),
+        child: child,
+      );
+    }
   }
 
   @override
@@ -150,7 +182,7 @@ class _GuestOnlyRoute<T> extends PageRoute<T> {
         // Jika sudah authenticated, redirect ke home
         if (authProvider.isAuthenticated) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            Navigator.of(context).pushReplacementNamed('/home');
+            Navigator.of(context).pushReplacementNamed('/dashboard');
           });
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
