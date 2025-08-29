@@ -17,7 +17,9 @@ return new class extends Migration
             $table->integer('priority')->default(3); // 1=lowest, 5=highest
             $table->string('category')->nullable();
             $table->boolean('is_read')->default(false);
-            $table->timestamp('timestamp');
+            $table->boolean('is_flagged')->default(false);
+            $table->timestamp('read_at')->nullable();
+            $table->timestamp('timestamp')->useCurrent();
             $table->timestamps();
 
             $table->index(['child_user_id', 'timestamp']);
