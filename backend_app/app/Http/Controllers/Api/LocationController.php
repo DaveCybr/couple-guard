@@ -6,18 +6,20 @@ use App\Http\Controllers\Controller;
 use App\Models\Location;
 use App\Models\FamilyMember;
 use App\Models\Alert;
+use App\Models\User;
+use App\Services\GeofenceService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Events\LocationUpdated;
-use App\Http\Controllers\Api\GeofenceController;
+use App\Events\AlertTriggered;
 
 class LocationController extends Controller
 {
-    protected $geofenceController;
+    protected $geofenceService;
 
-    public function __construct()
+    public function __construct(GeofenceService $geofenceService)
     {
-        $this->geofenceController = new GeofenceController();
+        $this->geofenceService = $geofenceService;
     }
 
     public function update(Request $request): JsonResponse
@@ -45,8 +47,8 @@ class LocationController extends Controller
             'timestamp' => now(),
         ]);
 
-        // Check geofence violations
-        $this->geofenceController->checkViolation(
+        // Check geofence violations using the service
+        $this->geofenceService->checkViolations(
             $user->id,
             $request->latitude,
             $request->longitude
@@ -57,7 +59,8 @@ class LocationController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Location updated successfully'
+            'message' => 'Location updated successfully',
+            'location_id' => $location->id
         ]);
     }
 
@@ -85,11 +88,19 @@ class LocationController extends Controller
         // Calculate time since last update
         $lastUpdate = now()->diffInMinutes($latestLocation->timestamp);
 
+        // Get child info
+        $child = User::find($childId);
+
         return response()->json([
             'success' => true,
+            'child' => [
+                'id' => $child->id,
+                'name' => $child->name,
+            ],
             'location' => $latestLocation,
             'last_update_minutes' => $lastUpdate,
-            'is_recent' => $lastUpdate <= 10 // Consider recent if within 10 minutes
+            'is_recent' => $lastUpdate <= 10, // Consider recent if within 10 minutes
+            'status' => $this->getLocationStatus($latestLocation, $lastUpdate)
         ]);
     }
 
@@ -98,8 +109,8 @@ class LocationController extends Controller
         $request->validate([
             'date' => 'nullable|date',
             'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date',
-            'limit' => 'nullable|integer|min:1|max:500'
+            'end_date' => 'nullable|date|after_or_equal:start_date',
+            'limit' => 'nullable|integer|min:1|max:1000'
         ]);
 
         if (!$this->verifyParentChildRelationship(auth()->user()->id, $childId)) {
@@ -121,14 +132,21 @@ class LocationController extends Controller
         }
 
         $locations = $query->orderBy('timestamp', 'desc')
-            ->limit($request->limit ?? 100)
+            ->limit($request->limit ?? 200)
             ->get();
 
         // Calculate total distance traveled (approximate)
         $totalDistance = $this->calculateTotalDistance($locations);
 
+        // Get child info
+        $child = User::find($childId);
+
         return response()->json([
             'success' => true,
+            'child' => [
+                'id' => $child->id,
+                'name' => $child->name,
+            ],
             'locations' => $locations,
             'total_points' => $locations->count(),
             'approximate_distance_km' => round($totalDistance / 1000, 2),
@@ -176,7 +194,11 @@ class LocationController extends Controller
                 now()->diffInMinutes($latestLocation->timestamp) : null;
 
             $childrenLocations[] = [
-                'child' => $child->user,
+                'child' => [
+                    'id' => $child->user->id,
+                    'name' => $child->user->name,
+                    'email' => $child->user->email,
+                ],
                 'location' => $latestLocation,
                 'last_update_minutes' => $lastUpdate,
                 'is_recent' => $lastUpdate && $lastUpdate <= 10,
@@ -187,7 +209,73 @@ class LocationController extends Controller
         return response()->json([
             'success' => true,
             'children_locations' => $childrenLocations,
-            'total_children' => $children->count()
+            'total_children' => $children->count(),
+            'last_updated' => now()->toISOString()
+        ]);
+    }
+
+    /**
+     * Get location statistics for a child
+     */
+    public function statistics($childId, Request $request): JsonResponse
+    {
+        $request->validate([
+            'period' => 'nullable|in:today,week,month',
+        ]);
+
+        if (!$this->verifyParentChildRelationship(auth()->user()->id, $childId)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized access'
+            ], 403);
+        }
+
+        $period = $request->period ?? 'week';
+
+        switch ($period) {
+            case 'today':
+                $startDate = now()->startOfDay();
+                $endDate = now()->endOfDay();
+                break;
+            case 'week':
+                $startDate = now()->startOfWeek();
+                $endDate = now()->endOfWeek();
+                break;
+            case 'month':
+                $startDate = now()->startOfMonth();
+                $endDate = now()->endOfMonth();
+                break;
+        }
+
+        $locations = Location::where('user_id', $childId)
+            ->whereBetween('timestamp', [$startDate, $endDate])
+            ->orderBy('timestamp')
+            ->get();
+
+        $totalDistance = $this->calculateTotalDistance($locations);
+        $averageSpeed = $this->calculateAverageSpeed($locations);
+
+        // Battery level analytics
+        $batteryStats = [
+            'average' => $locations->avg('battery_level'),
+            'minimum' => $locations->min('battery_level'),
+            'low_battery_incidents' => $locations->where('battery_level', '<=', 20)->count()
+        ];
+
+        return response()->json([
+            'success' => true,
+            'statistics' => [
+                'period' => $period,
+                'total_updates' => $locations->count(),
+                'distance_km' => round($totalDistance / 1000, 2),
+                'avg_speed_kmh' => round($averageSpeed, 2),
+                'battery_stats' => $batteryStats,
+                'most_visited_areas' => $this->getMostVisitedAreas($locations),
+                'date_range' => [
+                    'start' => $startDate->toDateString(),
+                    'end' => $endDate->toDateString()
+                ]
+            ]
         ]);
     }
 
@@ -200,18 +288,27 @@ class LocationController extends Controller
             ->first();
 
         if (!$recentAlert) {
-            Alert::create([
+            $priority = match (true) {
+                $batteryLevel <= 5 => 'critical',
+                $batteryLevel <= 10 => 'high',
+                default => 'medium'
+            };
+
+            $alert = Alert::create([
                 'child_user_id' => $childId,
                 'type' => 'battery',
-                'priority' => $batteryLevel <= 10 ? 'high' : 'medium',
+                'priority' => $priority,
                 'title' => 'Low Battery Alert',
                 'message' => "Child's device battery is at {$batteryLevel}%",
                 'data' => [
                     'battery_level' => $batteryLevel,
-                    'alert_threshold' => 20
+                    'alert_threshold' => 20,
+                    'location_tracking_affected' => $batteryLevel <= 10
                 ],
                 'triggered_at' => now()
             ]);
+
+            broadcast(new AlertTriggered($alert));
         }
     }
 
@@ -254,6 +351,35 @@ class LocationController extends Controller
         $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
 
         return $earthRadius * $c;
+    }
+
+    private function calculateAverageSpeed($locations)
+    {
+        if ($locations->count() < 2) return 0;
+
+        $totalDistance = $this->calculateTotalDistance($locations);
+        $totalTime = $locations->first()->timestamp->diffInHours($locations->last()->timestamp);
+
+        return $totalTime > 0 ? ($totalDistance / 1000) / $totalTime : 0; // km/h
+    }
+
+    private function getMostVisitedAreas($locations)
+    {
+        // Simplified area clustering - group by approximate coordinates
+        $areas = $locations->groupBy(function ($location) {
+            return round($location->latitude, 3) . ',' . round($location->longitude, 3);
+        });
+
+        return $areas->map(function ($group, $coords) {
+            [$lat, $lon] = explode(',', $coords);
+            return [
+                'latitude' => (float)$lat,
+                'longitude' => (float)$lon,
+                'visit_count' => $group->count(),
+                'first_visit' => $group->min('timestamp'),
+                'last_visit' => $group->max('timestamp'),
+            ];
+        })->sortByDesc('visit_count')->take(5)->values();
     }
 
     private function getLocationStatus($location, $lastUpdateMinutes)
