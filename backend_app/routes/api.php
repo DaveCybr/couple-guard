@@ -8,7 +8,11 @@ use App\Http\Controllers\Api\NotificationController;
 use App\Http\Controllers\Api\GeofenceController;
 use App\Http\Controllers\Api\ScreenController;
 use App\Http\Controllers\Api\AlertController;
-use App\Http\Controllers\Api\SettingsController;
+use App\Http\Controllers\Api\SettingController;
+use App\Http\Controllers\Api\DashboardController;
+// use App\Http\Controllers\Api\DeviceController;
+use Illuminate\Http\Request;
+
 
 /*
 |--------------------------------------------------------------------------
@@ -104,10 +108,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Settings & Configuration
     Route::prefix('settings')->group(function () {
-        Route::get('/{childId}', [SettingsController::class, 'get']);
-        Route::put('/{childId}', [SettingsController::class, 'update']);
-        Route::post('/{childId}/notification-filters', [SettingsController::class, 'updateNotificationFilters']);
-        Route::post('/{childId}/blocked-keywords', [SettingsController::class, 'updateBlockedKeywords']);
+        Route::get('/{childId}', [SettingController::class, 'get']);
+        Route::put('/{childId}', [SettingController::class, 'update']);
+        Route::post('/{childId}/notification-filters', [SettingController::class, 'updateNotificationFilters']);
+        Route::post('/{childId}/blocked-keywords', [SettingController::class, 'updateBlockedKeywords']);
     });
 
     // Dashboard & Analytics
@@ -118,12 +122,12 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // Device Management
-    Route::prefix('device')->group(function () {
-        Route::post('/register', [DeviceController::class, 'register']);
-        Route::put('/update-info', [DeviceController::class, 'updateInfo']);
-        Route::get('/list', [DeviceController::class, 'list']);
-        Route::delete('/{deviceId}', [DeviceController::class, 'remove']);
-    });
+    // Route::prefix('device')->group(function () {
+    //     Route::post('/register', [DeviceController::class, 'register']);
+    //     Route::put('/update-info', [DeviceController::class, 'updateInfo']);
+    //     Route::get('/list', [DeviceController::class, 'list']);
+    //     Route::delete('/{deviceId}', [DeviceController::class, 'remove']);
+    // });
 });
 
 // WebSocket Broadcasting Authentication
