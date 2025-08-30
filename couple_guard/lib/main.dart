@@ -10,14 +10,19 @@ import 'core/routes/route_generator.dart';
 import 'modules/auth/src/providers/auth_provider.dart';
 import 'modules/auth/src/services/auth_service.dart';
 import 'modules/auth/src/storages/secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+// import 'package:firebase_app_check/firebase_app_check.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize Firebase
   await Firebase.initializeApp();
+  // await FirebaseAppCheck.instance.activate(
+  //   androidProvider: AndroidProvider.debug,
+  //   appleProvider: AppleProvider.debug,
+  // );
 
-  // Initialize Notifications
   // await NotificationService.initialize();
 
   runApp(const CoupleGuardApp());
@@ -124,18 +129,16 @@ class _SplashScreenState extends State<SplashScreen>
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-    // Check if first time user
-    // For demo purposes, we'll go to onboarding first
-    AppNavigator.pushReplacement('/onboarding');
+    final prefs = await SharedPreferences.getInstance();
+    final hasOnboarded = prefs.getBool('hasOnboarded') ?? false;
 
-    // In real app, check this:
-    // if (isFirstTime) {
-    //   AppNavigator.pushReplacement('/onboarding');
-    // } else if (!authProvider.isAuthenticated) {
-    //   AppNavigator.pushReplacement('/auth/login');
-    // } else {
-    //   AppNavigator.pushReplacement('/dashboard');
-    // }
+    if (!hasOnboarded) {
+      AppNavigator.pushReplacement('/onboarding');
+    } else if (!authProvider.isAuthenticated) {
+      AppNavigator.pushReplacement('/auth/login');
+    } else {
+      AppNavigator.pushReplacement('/dashboard');
+    }
   }
 
   @override

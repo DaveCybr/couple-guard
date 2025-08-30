@@ -96,6 +96,20 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
+  Future<void> _handleGoogleLogin() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    try {
+      await authProvider.loginWithGoogle();
+
+      if (mounted && authProvider.isAuthenticated) {
+        AppNavigator.pushReplacement(AppRoutes.dashboard);
+      }
+    } catch (e) {
+      _showErrorSnackBar(e.toString());
+    }
+  }
+
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -426,20 +440,7 @@ class _LoginScreenState extends State<LoginScreen>
                 icon: Icons.g_mobiledata,
                 label: 'Google',
                 onPressed: () {
-                  // TODO: Implement Google login
-                },
-              ),
-            ),
-
-            const SizedBox(width: 16),
-
-            // Apple Login
-            Expanded(
-              child: _buildSocialButton(
-                icon: Icons.apple,
-                label: 'Apple',
-                onPressed: () {
-                  // TODO: Implement Apple login
+                  _handleGoogleLogin();
                 },
               ),
             ),

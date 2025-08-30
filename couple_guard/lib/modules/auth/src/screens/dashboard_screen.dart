@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
+import '../providers/auth_provider.dart';
+import 'package:provider/provider.dart';
+import '../../../../core/routes/app_routes.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -65,7 +68,7 @@ class BottomNavBackgroundPainter extends CustomPainter {
 
 class _DashboardScreenState extends State<DashboardScreen>
     with SingleTickerProviderStateMixin {
-  int _selectedIndex = 0;
+  int _selectedIndex = 1;
   String selectedChild = 'Sarah';
   late AnimationController _animationController;
   late Animation<double> _curveAnimation;
@@ -483,59 +486,185 @@ class _DashboardScreenState extends State<DashboardScreen>
         'subtitle': 'Pengaturan keamanan',
       },
       {'icon': Icons.help, 'title': 'Bantuan', 'subtitle': 'FAQ dan support'},
+      {
+        'icon': Icons.qr_code,
+        'title': 'Kode',
+        'subtitle': 'Lihat kode unik anak',
+      },
     ];
 
     return ListView.builder(
       padding: const EdgeInsets.all(16),
-      itemCount: settings.length,
+      itemCount: settings.length + 1, // +1 untuk Logout
       itemBuilder: (context, index) {
-        final setting = settings[index];
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.grey.withOpacity(0.1),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
+        if (index < settings.length) {
+          final setting = settings[index];
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: (setting['title'] == 'Kode'
+                          ? Colors.green
+                          : const Color(0xFF3B82F6))
+                      .withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  setting['icon'] as IconData,
+                  color:
+                      (setting['title'] == 'Kode'
+                          ? Colors.green
+                          : const Color(0xFF3B82F6)),
+                  size: 20,
+                ),
               ),
-            ],
-          ),
-          child: ListTile(
-            leading: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF3B82F6).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
+              title: Text(
+                setting['title'] as String,
+                style: TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 16,
+                  color:
+                      setting['title'] == 'Kode' ? Colors.green : Colors.black,
+                ),
               ),
-              child: Icon(
-                setting['icon'] as IconData,
-                color: const Color(0xFF3B82F6),
-                size: 20,
+              subtitle: Text(
+                setting['subtitle'] as String,
+                style: const TextStyle(fontSize: 12, color: Colors.grey),
               ),
+              trailing: const Icon(
+                Icons.arrow_forward_ios,
+                size: 16,
+                color: Colors.grey,
+              ),
+              onTap: () {
+                if (setting['title'] == 'Kode') {
+                  // 🔹 tampilkan kode unik di popup
+                  showDialog(
+                    context: context,
+                    builder: (context) {
+                      // misal kode tersimpan di _user.parentCode
+                      String code =
+                          Provider.of<AuthProvider>(
+                            context,
+                            listen: false,
+                          ).user?.parentCode ??
+                          "Belum tersedia";
+
+                      return AlertDialog(
+                        title: const Text('Kode Unik'),
+                        content: Text(
+                          code,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 2,
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Tutup'),
+                          ),
+                        ],
+                      );
+                    },
+                  );
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('${setting['title']} diklik')),
+                  );
+                }
+              },
             ),
-            title: Text(
-              setting['title'] as String,
-              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 16),
+          );
+        } else {
+          // 🔹 Logout
+          return Container(
+            margin: const EdgeInsets.only(top: 12),
+            decoration: BoxDecoration(
+              color: Colors.red.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
             ),
-            subtitle: Text(
-              setting['subtitle'] as String,
-              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            child: ListTile(
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.logout, color: Colors.red, size: 20),
+              ),
+              title: const Text(
+                'Logout',
+                style: TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 16,
+                  color: Colors.red,
+                ),
+              ),
+              onTap: () async {
+                final confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (context) {
+                    return AlertDialog(
+                      title: const Text("Konfirmasi"),
+                      content: const Text("Apakah Anda yakin ingin logout?"),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(false),
+                          child: const Text("Batal"),
+                        ),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                          ),
+                          onPressed: () => Navigator.of(context).pop(true),
+                          child: const Text("Logout"),
+                        ),
+                      ],
+                    );
+                  },
+                );
+
+                if (confirm == true) {
+                  try {
+                    await Provider.of<AuthProvider>(
+                      context,
+                      listen: false,
+                    ).logout();
+
+                    if (context.mounted) {
+                      Navigator.of(context).pushNamedAndRemoveUntil(
+                        AppRoutes.login,
+                        (route) => false,
+                      );
+                    }
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Gagal logout: $e')),
+                      );
+                    }
+                  }
+                }
+              },
             ),
-            trailing: const Icon(
-              Icons.arrow_forward_ios,
-              size: 16,
-              color: Colors.grey,
-            ),
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('${setting['title']} diklik')),
-              );
-            },
-          ),
-        );
+          );
+        }
       },
     );
   }
@@ -547,21 +676,26 @@ class _DashboardScreenState extends State<DashboardScreen>
       appBar: AppBar(
         backgroundColor: AppColors.primary,
         elevation: 0,
-        title: const Row(
-          children: [
-            Icon(Icons.shield, color: Colors.white, size: 24),
-            SizedBox(width: 8),
-            Text(
-              'Couple Guard',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
+        title: Consumer<AuthProvider>(
+          builder: (context, auth, _) {
+            return Row(
+              children: [
+                const Icon(Icons.shield, color: Colors.white, size: 24),
+                const SizedBox(width: 8),
+                Text(
+                  'Couple Guard - ${auth.user?.name ?? ""}', // tampilkan nama
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
+
       body: IndexedStack(
         index: _selectedIndex,
         children: [

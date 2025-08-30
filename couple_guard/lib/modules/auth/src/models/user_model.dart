@@ -1,4 +1,3 @@
-// lib/core/models/user_model.dart
 class UserModel {
   final int id;
   final String name;
@@ -8,6 +7,7 @@ class UserModel {
   final bool isEmailVerified;
   final int? partnerId;
   final String? partnerName;
+  final String? parentCode; // 🔹 Tambahkan ini
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -20,6 +20,7 @@ class UserModel {
     required this.isEmailVerified,
     this.partnerId,
     this.partnerName,
+    this.parentCode, // 🔹 tambahkan di constructor
     required this.createdAt,
     required this.updatedAt,
   });
@@ -34,6 +35,7 @@ class UserModel {
       isEmailVerified: json['is_email_verified'] ?? false,
       partnerId: json['partner_id'],
       partnerName: json['partner_name'],
+      parentCode: json['parentCode'], // 🔹 ambil dari json
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: DateTime.parse(json['updated_at']),
     );
@@ -49,6 +51,7 @@ class UserModel {
       'is_email_verified': isEmailVerified,
       'partner_id': partnerId,
       'partner_name': partnerName,
+      'parentCode': parentCode, // 🔹 simpan ke json
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };

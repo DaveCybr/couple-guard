@@ -95,13 +95,14 @@ class _RegisterScreenState extends State<RegisterScreen>
 
     if (success) {
       // kalau langsung ke dashboard
-      AppNavigator.pushReplacement(AppRoutes.dashboard);
+      Navigator.of(
+        context,
+      ).pushNamedAndRemoveUntil(AppRoutes.dashboard, (route) => false);
 
       // atau kalau mau ke login dulu
       // AppNavigator.pushReplacement(AppRoutes.login);
     } else {
       _showErrorSnackBar("Registration failed, please try again.");
-      
     }
   }
 
