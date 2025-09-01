@@ -31,50 +31,53 @@ dependencies:
   flutter:
     sdk: flutter
 
-  firebase_core: ^2.24.2
-  firebase_auth: ^4.15.3
-  firebase_crashlytics: ^3.4.9
-  cloud_firestore: ^4.13.6
-  firebase_analytics: ^10.7.4
+  # HTTP & API
+  dio:
+  retrofit:
+  json_annotation:
 
   # State Management
-  flutter_bloc: ^8.1.3
-  hydrated_bloc: ^9.1.3
+  provider:
 
-  # Location & Device
-  geolocator: ^10.1.0
-  connectivity_plus: ^5.0.2
-  device_info_plus: ^9.1.1
-  battery_plus: ^4.0.2
-  permission_handler: ^11.1.0
+  # Location Services
+  geolocator:
+  location:
 
-  # Background Processing
-  flutter_background_service: ^5.0.5
-  flutter_local_notifications: ^16.3.0
-  workmanager: ^0.5.2
+  # Permissions
+  permission_handler:
 
-  # Storage
-  sqflite: ^2.3.0
-  shared_preferences: ^2.2.2
-  path_provider: ^2.1.1
+  # Background Services
+  flutter_background_service:
+  flutter_background_service_android:
 
-  # Network & API
-  dio: ^5.4.0
-  retrofit: ^4.0.3
-  json_annotation: ^4.8.1
+  # Real-time Communication
+  pusher_channels_flutter:
+  web_socket_channel:
 
-  # Security
-  crypto: ^3.0.3
-  encrypt: ^5.0.1
+  # Local Storage
+  shared_preferences:
+  encrypted_shared_preferences:
 
-  # UI & Utils
-  go_router: ^12.1.3
-  get_it: ^7.6.4
-  dartz: ^0.10.1
-  equatable: ^2.0.5
-  uuid: ^4.2.1
-  logger: ^2.0.2
-  package_info_plus: ^4.2.0
+  # Screen Capture
+  flutter_screen_recording:
+  screenshot:
+
+  # Notification Handling
+  notification_listener_service:
+  flutter_local_notifications:
+
+  # Device Info & Security
+  device_info_plus:
+  crypto:
+
+  # Emergency Features
+  url_launcher:
+  vibration:
+
+  # UI & Animation
+  cupertino_icons:
+  lottie:
+  animations:
 
 dev_dependencies:
   flutter_test:
