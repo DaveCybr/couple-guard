@@ -39,6 +39,17 @@ class AppStateProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
+  bool _isLocationTrackingEnabled = false;
+  bool _isNotificationListenerEnabled = false;
+  bool _isScreenMirroringActive = false;
+  String? _lastLocationUpdate;
+
+  // Getters
+  bool get isLocationTrackingEnabled => _isLocationTrackingEnabled;
+  bool get isNotificationListenerEnabled => _isNotificationListenerEnabled;
+  bool get isScreenMirroringActive => _isScreenMirroringActive;
+  String? get lastLocationUpdate => _lastLocationUpdate;
+
   // Authentication methods
   void setUser(User user) {
     _currentUser = user;
@@ -133,5 +144,28 @@ class AppStateProvider extends ChangeNotifier {
         _family != null &&
         (_locationStatus == LocationStatus.active ||
             _locationStatus == LocationStatus.searching);
+  }
+
+  // Location tracking
+  void setLocationTrackingEnabled(bool enabled) {
+    _isLocationTrackingEnabled = enabled;
+    notifyListeners();
+  }
+
+  void updateLastLocation(String locationInfo) {
+    _lastLocationUpdate = locationInfo;
+    notifyListeners();
+  }
+
+  // Notification listener
+  void setNotificationListenerEnabled(bool enabled) {
+    _isNotificationListenerEnabled = enabled;
+    notifyListeners();
+  }
+
+  // Screen mirroring
+  void setScreenMirroringActive(bool active) {
+    _isScreenMirroringActive = active;
+    notifyListeners();
   }
 }

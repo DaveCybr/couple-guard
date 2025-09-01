@@ -30,6 +30,7 @@ android {
         
         // ✅ Add this to ensure proper service handling
         multiDexEnabled = true
+        manifestPlaceholders["backgroundServiceName"] = "BackgroundService"
     }
 
     buildTypes {
@@ -48,6 +49,14 @@ android {
     packagingOptions {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
+            excludes += setOf(
+                "/META-INF/{AL2.0,LGPL2.1}",
+                "/META-INF/DEPENDENCIES",
+                "/META-INF/LICENSE",
+                "/META-INF/LICENSE.txt",
+                "/META-INF/NOTICE",
+                "/META-INF/NOTICE.txt"
+            )
         }
     }
 }

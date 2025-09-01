@@ -15,6 +15,9 @@
     <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_NOTIFICATION" />
+
     <!-- Screen capture permissions -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
@@ -48,7 +51,6 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
@@ -65,10 +67,16 @@
         </activity>
 
         <!-- ✅ ADD: Flutter Background Service with proper foreground service type -->
+        <!-- <service
+            android:name="id.flutter.flutter_background_service.BackgroundService"
+            android:exported="false"
+            android:foregroundServiceType="location|dataSync|specialUse" /> -->
+
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
             android:exported="false"
-            android:foregroundServiceType="location|dataSync|specialUse" />
+            android:foregroundServiceType="location|dataSync"
+            tools:replace="android:exported" />
 
         <!-- Notification Listener Service -->
         <service
