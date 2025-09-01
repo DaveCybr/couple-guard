@@ -2,12 +2,9 @@ class UserModel {
   final int id;
   final String name;
   final String email;
+  final String role;
   final String? phone;
-  final String? avatar;
   final bool isEmailVerified;
-  final int? partnerId;
-  final String? partnerName;
-  final String? parentCode; // 🔹 Tambahkan ini
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -15,12 +12,9 @@ class UserModel {
     required this.id,
     required this.name,
     required this.email,
+    required this.role,
     this.phone,
-    this.avatar,
     required this.isEmailVerified,
-    this.partnerId,
-    this.partnerName,
-    this.parentCode, // 🔹 tambahkan di constructor
     required this.createdAt,
     required this.updatedAt,
   });
@@ -30,12 +24,9 @@ class UserModel {
       id: json['id'],
       name: json['name'],
       email: json['email'],
+      role: json['role'],
       phone: json['phone'],
-      avatar: json['avatar'],
-      isEmailVerified: json['is_email_verified'] ?? false,
-      partnerId: json['partner_id'],
-      partnerName: json['partner_name'],
-      parentCode: json['parentCode'], // 🔹 ambil dari json
+      isEmailVerified: json['email_verified_at'] != null,
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: DateTime.parse(json['updated_at']),
     );
@@ -46,12 +37,9 @@ class UserModel {
       'id': id,
       'name': name,
       'email': email,
+      'role': role,
       'phone': phone,
-      'avatar': avatar,
       'is_email_verified': isEmailVerified,
-      'partner_id': partnerId,
-      'partner_name': partnerName,
-      'parentCode': parentCode, // 🔹 simpan ke json
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };

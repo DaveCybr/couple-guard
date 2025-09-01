@@ -3,6 +3,9 @@ import '../../../../core/constants/app_colors.dart';
 import '../providers/auth_provider.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/routes/app_routes.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'dart:ui' as ui;
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -19,12 +22,17 @@ class BottomNavBackgroundPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final paint =
+    final bgPaint =
         Paint()
           ..color = Colors.white
           ..style = PaintingStyle.fill;
 
-    final path = Path();
+    final shadowPaint =
+        Paint()
+          ..color = Colors.black.withOpacity(0.25) // warna shadow
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+
+    final path = ui.Path();
 
     final double itemWidth = size.width / totalItems;
     final double centerX = itemWidth * activeIndex + itemWidth / 2;
@@ -33,23 +41,23 @@ class BottomNavBackgroundPainter extends CustomPainter {
 
     path.lineTo(centerX - curveRadius * 2, 0);
 
-    // Melengkung ke atas (semakin besar curveHeight, makin tinggi)
+    // Lengkung ke atas
     path.cubicTo(
       centerX - curveRadius,
-      0, // kontrol kiri 1
+      0,
       centerX - curveRadius,
-      -curveHeight, // kontrol kiri 2
+      -curveHeight,
       centerX,
-      -curveHeight, // titik puncak
+      -curveHeight,
     );
 
     path.cubicTo(
       centerX + curveRadius,
-      -curveHeight, // kontrol kanan 1
+      -curveHeight,
       centerX + curveRadius,
-      0, // kontrol kanan 2
+      0,
       centerX + curveRadius * 2,
-      0, // titik akhir
+      0,
     );
 
     path.lineTo(size.width, 0);
@@ -57,7 +65,15 @@ class BottomNavBackgroundPainter extends CustomPainter {
     path.lineTo(0, size.height);
     path.close();
 
-    canvas.drawPath(path, paint);
+    // 🔥 Shadow ke atas: kita geser path sedikit ke bawah,
+    // jadi efek blur-nya muncul di bagian atas
+    canvas.save();
+    canvas.translate(0, 4); // atur jarak shadow ke atas
+    canvas.drawPath(path, shadowPaint);
+    canvas.restore();
+
+    // Background putih
+    canvas.drawPath(path, bgPaint);
   }
 
   @override
@@ -126,13 +142,6 @@ class _DashboardScreenState extends State<DashboardScreen>
     },
   ];
 
-  final List<Map<String, dynamic>> quickActions = [
-    {'icon': Icons.location_on, 'label': 'Lokasi', 'color': Colors.blue},
-    {'icon': Icons.camera_alt, 'label': 'Kamera', 'color': Colors.green},
-    {'icon': Icons.screen_share, 'label': 'Mirror', 'color': Colors.purple},
-    {'icon': Icons.block, 'label': 'Blokir', 'color': Colors.red},
-  ];
-
   Widget _buildHomePage() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -144,7 +153,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
                   color: Colors.grey.withOpacity(0.1),
@@ -171,12 +180,12 @@ class _DashboardScreenState extends State<DashboardScreen>
           ),
           const SizedBox(height: 16),
 
-          // Quick Actions
+          // Card Lokasi dengan Map
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(20),
               boxShadow: [
                 BoxShadow(
                   color: Colors.grey.withOpacity(0.1),
@@ -189,73 +198,201 @@ class _DashboardScreenState extends State<DashboardScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Aksi Cepat',
+                  'Lokasi',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: Color(0xFF1E3A8A),
                   ),
                 ),
-                const SizedBox(height: 16),
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 1.5,
-                  ),
-                  itemCount: quickActions.length,
-                  itemBuilder: (context, index) {
-                    final action = quickActions[index];
-                    return GestureDetector(
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('${action['label']} diklik')),
-                        );
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              action['color'].withOpacity(0.1),
-                              action['color'].withOpacity(0.05),
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: action['color'].withOpacity(0.3),
-                          ),
+                const SizedBox(height: 12),
+
+                // Map view pakai flutter_map
+                SizedBox(
+                  height: 200,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: FlutterMap(
+                      options: MapOptions(
+                        initialCenter: LatLng(-6.200000, 106.816666), // Jakarta
+                        initialZoom: 14,
+                      ),
+                      children: [
+                        TileLayer(
+                          urlTemplate:
+                              'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                          subdomains: const ['a', 'b', 'c'],
                         ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: action['color'],
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Icon(
-                                action['icon'],
-                                color: Colors.white,
-                                size: 24,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              action['label'],
-                              style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: LatLng(-6.200000, 106.816666),
+                              width: 40,
+                              height: 40,
+                              child: const Icon(
+                                Icons.location_pin,
+                                color: Colors.red,
+                                size: 40,
                               ),
                             ),
                           ],
                         ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {},
+                        child: const Text("Geofence"),
                       ),
-                    );
-                  },
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {},
+                        child: const Text("Pembaruan"),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Card Potretan
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Potretan',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E3A8A),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {},
+                        child: Column(
+                          children: const [
+                            Icon(
+                              Icons.camera_alt,
+                              color: Colors.blue,
+                              size: 36,
+                            ),
+                            SizedBox(height: 8),
+                            Text("Potretan Kamera"),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {},
+                        child: Column(
+                          children: const [
+                            Icon(
+                              Icons.phone_android,
+                              color: Colors.green,
+                              size: 36,
+                            ),
+                            SizedBox(height: 8),
+                            Text("Potretan Layar"),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Card Kamera & Layar
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Kamera & Layar',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1E3A8A),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {},
+                        child: Column(
+                          children: const [
+                            Icon(
+                              Icons.videocam,
+                              color: Colors.purple,
+                              size: 36,
+                            ),
+                            SizedBox(height: 8),
+                            Text("Kamera"),
+                          ],
+                        ),
+                      ),
+                    ),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {},
+                        child: Column(
+                          children: const [
+                            Icon(
+                              Icons.desktop_windows,
+                              color: Colors.orange,
+                              size: 36,
+                            ),
+                            SizedBox(height: 8),
+                            Text("Layar"),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -329,85 +466,425 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Widget _buildActivitiesPage() {
-    final activities = [
-      {
-        'time': '14:30',
-        'activity': 'Sarah membuka Instagram',
-        'status': 'allowed',
-      },
-      {
-        'time': '14:15',
-        'activity': 'Lokasi berubah ke Taman',
-        'status': 'normal',
-      },
-      {'time': '13:45', 'activity': 'Screen time 2 jam', 'status': 'warning'},
-      {
-        'time': '13:20',
-        'activity': 'Alex coba buka YouTube',
-        'status': 'blocked',
-      },
-    ];
+    final notificationsByDate = {
+      '2025/08/20': [
+        {
+          'app': 'King\'s Choice',
+          'title': 'King\'s Choice',
+          'message':
+              'Yang Mulia, acara Perairan Baru dibuka dan telah siap untuk anda bergabung dalam kegembiraan!',
+          'time': '12:03',
+          'icon': 'game',
+          'category': 'Dev',
+        },
+        {
+          'app': 'King\'s Choice',
+          'title': 'King\'s Choice',
+          'message':
+              'Yang Mulia, acara Scarlet Beauty dibuka dan telah siap untuk anda bergabung dalam kegembiraan!',
+          'time': '12:03',
+          'icon': 'game',
+          'category': 'Dev',
+        },
+        {
+          'app': 'Instagram',
+          'title': 'farralunee_: -',
+          'message': 'ape',
+          'time': '12:02',
+          'icon': 'instagram',
+          'category': 'Dev',
+        },
+        {
+          'app': 'WhatsApp',
+          'title': '~ Diva MIF JTI POLIJE NEWW',
+          'message': 'Someone shared a message',
+          'time': '12:02',
+          'icon': 'whatsapp',
+          'category': 'Dev',
+        },
+        {
+          'app': 'Shopee',
+          'title': 'Shopee',
+          'message':
+              'Flash Sale dimulai! Dapatkan diskon hingga 90% untuk produk pilihan',
+          'time': '11:45',
+          'icon': 'shopee',
+          'category': 'Dev',
+        },
+        {
+          'app': 'Gmail',
+          'title': 'Google Account',
+          'message':
+              'Sign-in attempt was blocked. We prevented someone from signing in to your account.',
+          'time': '11:30',
+          'icon': 'gmail',
+          'category': 'Dev',
+        },
+      ],
+      '2025/08/19': [
+        {
+          'app': 'YouTube',
+          'title': 'YouTube',
+          'message':
+              'Kreator favorit Anda baru saja mengupload video baru: "Tutorial Flutter Advanced"',
+          'time': '20:15',
+          'icon': 'youtube',
+          'category': 'Dev',
+        },
+        {
+          'app': 'Telegram',
+          'title': 'Flutter Indonesia',
+          'message':
+              'Ada yang tahu cara fix error ini? RenderFlex overflowed...',
+          'time': '19:58',
+          'icon': 'telegram',
+          'category': 'Dev',
+        },
+        {
+          'app': 'Bank BCA',
+          'title': 'BCA mobile',
+          'message':
+              'Transaksi berhasil. Transfer ke 1234***789 sebesar Rp 50.000',
+          'time': '18:30',
+          'icon': 'bank',
+          'category': 'Dev',
+        },
+        {
+          'app': 'Spotify',
+          'title': 'Spotify',
+          'message':
+              'Discover Weekly Anda sudah siap! Temukan musik baru yang mungkin Anda sukai',
+          'time': '17:00',
+          'icon': 'spotify',
+          'category': 'Dev',
+        },
+        {
+          'app': 'Gojek',
+          'title': 'Gojek',
+          'message':
+              'Promo spesial untuk Anda! Diskon 50% untuk GoFood hingga Rp 25.000',
+          'time': '16:45',
+          'icon': 'gojek',
+          'category': 'Dev',
+        },
+        {
+          'app': 'Facebook',
+          'title': 'Facebook',
+          'message':
+              'John Doe dan 5 teman lainnya memposting sesuatu. Lihat update terbaru mereka.',
+          'time': '15:20',
+          'icon': 'facebook',
+          'category': 'Dev',
+        },
+      ],
+    };
 
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: activities.length,
-      itemBuilder: (context, index) {
-        final activity = activities[index];
-        Color statusColor =
-            activity['status'] == 'blocked'
-                ? Colors.red
-                : activity['status'] == 'warning'
-                ? Colors.orange
-                : activity['status'] == 'allowed'
-                ? Colors.green
-                : Colors.blue;
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: notificationsByDate.keys.length,
+      itemBuilder: (context, dateIndex) {
+        final date = notificationsByDate.keys.elementAt(dateIndex);
+        final notifications = notificationsByDate[date]!;
 
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(12),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.grey.withOpacity(0.1),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Date Header
+            Container(
+              alignment: Alignment.centerLeft,
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
                 ),
-                child: Icon(Icons.circle, color: statusColor, size: 16),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      activity['activity']!,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    Text(
-                      activity['time']!,
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.primary, width: 1.5),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withOpacity(0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
                     ),
                   ],
                 ),
+                child: Text(
+                  date,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.primary,
+                  ),
+                ),
               ),
-            ],
-          ),
+            ),
+
+            // Notifications for this date
+            ListView.builder(
+              shrinkWrap: true,
+              physics: NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemCount: notifications.length,
+              itemBuilder: (context, index) {
+                final activity = notifications[index];
+
+                // App icon based on type
+                Widget appIcon;
+
+                switch (activity['icon']) {
+                  case 'game':
+                    appIcon = Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.orange.shade100,
+                      ),
+                      child: Icon(Icons.games, color: Colors.orange, size: 20),
+                    );
+                    break;
+                  case 'instagram':
+                    appIcon = Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        gradient: LinearGradient(
+                          colors: [Colors.purple, Colors.pink, Colors.orange],
+                        ),
+                      ),
+                      child: Icon(
+                        Icons.camera_alt,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    );
+                    break;
+                  case 'whatsapp':
+                    appIcon = Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.green,
+                      ),
+                      child: Icon(Icons.chat, color: Colors.white, size: 20),
+                    );
+                    break;
+                  case 'shopee':
+                    appIcon = Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.orange.shade600,
+                      ),
+                      child: Icon(
+                        Icons.shopping_bag,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    );
+                    break;
+                  case 'gmail':
+                    appIcon = Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.red.shade500,
+                      ),
+                      child: Icon(Icons.email, color: Colors.white, size: 20),
+                    );
+                    break;
+                  case 'youtube':
+                    appIcon = Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.red.shade600,
+                      ),
+                      child: Icon(
+                        Icons.play_arrow,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    );
+                    break;
+                  case 'telegram':
+                    appIcon = Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.blue.shade500,
+                      ),
+                      child: Icon(Icons.send, color: Colors.white, size: 20),
+                    );
+                    break;
+                  case 'bank':
+                    appIcon = Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.blue.shade700,
+                      ),
+                      child: Icon(
+                        Icons.account_balance,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    );
+                    break;
+                  case 'spotify':
+                    appIcon = Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.green.shade600,
+                      ),
+                      child: Icon(
+                        Icons.music_note,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    );
+                    break;
+                  case 'gojek':
+                    appIcon = Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.green.shade700,
+                      ),
+                      child: Icon(
+                        Icons.motorcycle,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    );
+                    break;
+                  case 'facebook':
+                    appIcon = Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.blue.shade600,
+                      ),
+                      child: Icon(
+                        Icons.facebook,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    );
+                    break;
+                  default:
+                    appIcon = Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        color: Colors.grey.shade300,
+                      ),
+                      child: Icon(
+                        Icons.notifications,
+                        color: Colors.grey.shade600,
+                        size: 20,
+                      ),
+                    );
+                }
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.06),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      appIcon,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  activity['app']!,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                                Text(
+                                  activity['time']!,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              activity['title']!,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.black,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              activity['message']!,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Colors.black87,
+                                height: 1.3,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              activity['category']!,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+
+            // Add spacing after each date section
+            if (dateIndex < notificationsByDate.keys.length - 1)
+              const SizedBox(height: 16),
+          ],
         );
       },
     );
@@ -475,22 +952,6 @@ class _DashboardScreenState extends State<DashboardScreen>
         'title': 'Profil Anak',
         'subtitle': 'Kelola profil anak',
       },
-      {
-        'icon': Icons.notifications,
-        'title': 'Notifikasi',
-        'subtitle': 'Pengaturan notifikasi',
-      },
-      {
-        'icon': Icons.security,
-        'title': 'Keamanan',
-        'subtitle': 'Pengaturan keamanan',
-      },
-      {'icon': Icons.help, 'title': 'Bantuan', 'subtitle': 'FAQ dan support'},
-      {
-        'icon': Icons.qr_code,
-        'title': 'Kode',
-        'subtitle': 'Lihat kode unik anak',
-      },
     ];
 
     return ListView.builder(
@@ -556,12 +1017,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     context: context,
                     builder: (context) {
                       // misal kode tersimpan di _user.parentCode
-                      String code =
-                          Provider.of<AuthProvider>(
-                            context,
-                            listen: false,
-                          ).user?.parentCode ??
-                          "Belum tersedia";
+                      String code = "Belum tersedia";
 
                       return AlertDialog(
                         title: const Text('Kode Unik'),
@@ -645,7 +1101,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                     await Provider.of<AuthProvider>(
                       context,
                       listen: false,
-                    ).logout();
+                    ).logout(); // ✅ tidak pakai argumen
 
                     if (context.mounted) {
                       Navigator.of(context).pushNamedAndRemoveUntil(
@@ -713,7 +1169,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               clipBehavior: Clip.none,
               children: [
                 CustomPaint(
-                  size: Size(MediaQuery.of(context).size.width, 90),
+                  size: Size(MediaQuery.of(context).size.width, 110),
                   painter: BottomNavBackgroundPainter(
                     activeIndex: _curveAnimation.value,
                     totalItems: 3,
