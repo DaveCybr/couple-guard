@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -25,12 +27,6 @@ void main() async {
   // Set preferred orientations
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
-  // Hide app from recent apps (security)
-  await SystemChrome.setEnabledSystemUIMode(
-    SystemUiMode.manual,
-    overlays: [SystemUiOverlay.bottom],
-  );
-
   runApp(const ParentalControlChildApp());
 }
 
@@ -52,6 +48,7 @@ Future<void> initializeBackgroundService() async {
       initialNotificationTitle: 'Safety Monitor Active',
       initialNotificationContent: 'Keeping you safe...',
       foregroundServiceNotificationId: 888,
+      // Service types are declared in AndroidManifest.xml
     ),
   );
 }
@@ -73,12 +70,26 @@ void onStart(ServiceInstance service) async {
   });
 
   // Initialize background services
-  final backgroundService = BackgroundService();
-  await backgroundService.initialize();
+  try {
+    final backgroundService = BackgroundService();
+    await backgroundService.initialize();
 
-  // Start monitoring services
-  backgroundService.startLocationTracking();
-  backgroundService.startNotificationMonitoring();
+    // Start monitoring services
+    backgroundService.startLocationTracking();
+    backgroundService.startNotificationMonitoring();
+  } catch (e) {
+    print('Background service initialization failed: $e');
+  }
+
+  // Keep service alive with periodic tasks
+  Timer.periodic(const Duration(seconds: 30), (timer) async {
+    try {
+      print("Background service heartbeat: ${DateTime.now()}");
+      // Perform periodic maintenance tasks here
+    } catch (e) {
+      print('Periodic task error: $e');
+    }
+  });
 }
 
 @pragma('vm:entry-point')
@@ -95,9 +106,6 @@ class ParentalControlChildApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AppStateProvider()),
         Provider<ApiService>(create: (_) => ApiService()),
-        // Provider<AuthService>(
-        //   create: (context) => AuthService(context.read<ApiService>()),
-        // ),
         Provider<LocationService>(
           create: (context) => LocationService(context.read<ApiService>()),
         ),
@@ -128,12 +136,9 @@ class ParentalControlChildApp extends StatelessWidget {
   }
 }
 
-// Device Utils for stealth mode
 class DeviceUtils {
   static Future<void> enableStealthMode() async {
     try {
-      // Hide app icon from launcher (requires root or system app)
-      // Note: This might need custom implementation based on requirements
       await _hideAppIcon();
     } catch (e) {
       print('Stealth mode setup failed: $e');
@@ -142,12 +147,11 @@ class DeviceUtils {
 
   static Future<void> _hideAppIcon() async {
     // Implementation depends on stealth requirements
-    // Could use launcher icon manipulation or other methods
   }
 
   static Future<String> getDeviceId() async {
     final deviceInfo = DeviceInfoPlugin();
     final androidInfo = await deviceInfo.androidInfo;
-    return androidInfo.id; // or create custom UUID
+    return androidInfo.id;
   }
 }

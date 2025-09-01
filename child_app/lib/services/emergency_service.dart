@@ -64,7 +64,8 @@ class EmergencyService {
   // Provide tactile and audio feedback
   Future<void> _provideTactileFeedback() async {
     // Strong vibration pattern
-    if (await Vibration.hasVibrator()) {
+    final hasVibrator = await Vibration.hasVibrator();
+    if (hasVibrator != null && hasVibrator) {
       await Vibration.vibrate(
         pattern: [0, 500, 200, 500, 200, 500], // SOS pattern
         intensities: [0, 255, 0, 255, 0, 255],

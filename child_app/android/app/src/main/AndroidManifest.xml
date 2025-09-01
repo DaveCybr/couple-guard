@@ -64,7 +64,11 @@
             </intent-filter>
         </activity>
 
-        <!-- ✅ REMOVED: Flutter Background Service declaration - let library handle it -->
+        <!-- ✅ ADD: Flutter Background Service with proper foreground service type -->
+        <service
+            android:name="id.flutter.flutter_background_service.BackgroundService"
+            android:exported="false"
+            android:foregroundServiceType="location|dataSync|specialUse" />
 
         <!-- Notification Listener Service -->
         <service
