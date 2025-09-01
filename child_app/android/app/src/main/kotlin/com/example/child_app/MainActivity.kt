@@ -1,4 +1,4 @@
-package com.yourcompany.parental_control_child
+package com.satellite.child_app
 
 import android.content.Context
 import android.content.Intent
@@ -96,13 +96,13 @@ class MainActivity: FlutterActivity() {
     }
 
     private fun startNotificationListening() {
-        val intent = Intent(this, NotificationListenerService::class.java)
+        val intent = Intent(this, MyNotificationListenerService::class.java)
         intent.action = "START_LISTENING"
         startService(intent)
     }
 
     private fun stopNotificationListening() {
-        val intent = Intent(this, NotificationListenerService::class.java)
+        val intent = Intent(this, MyNotificationListenerService::class.java)
         intent.action = "STOP_LISTENING"
         startService(intent)
     }
@@ -115,8 +115,6 @@ class MainActivity: FlutterActivity() {
     }
 
     private fun captureScreen(result: MethodChannel.Result) {
-        // Implement screen capture logic
-        // This would use MediaProjection API
         try {
             val screenshotBytes = ScreenCaptureHelper.captureScreen(this)
             result.success(screenshotBytes)
@@ -126,12 +124,10 @@ class MainActivity: FlutterActivity() {
     }
 
     private fun getCurrentForegroundApp(): String? {
-        // Get current foreground app package name
         return ForegroundAppDetector.getCurrentApp(this)
     }
 
     private fun showMirroringIndicator() {
-        // Show subtle overlay indicating screen is being mirrored
         OverlayHelper.showMirroringIndicator(this)
     }
 
@@ -145,7 +141,6 @@ class MainActivity: FlutterActivity() {
     }
 
     private fun enableLoudMode() {
-        // Set device to maximum volume for emergency
         val audioManager = getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
         audioManager.setStreamVolume(
             android.media.AudioManager.STREAM_RING,
