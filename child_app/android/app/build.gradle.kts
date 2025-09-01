@@ -27,11 +27,27 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        
+        // ✅ Add this to ensure proper service handling
+        multiDexEnabled = true
     }
 
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("debug")
+            // ✅ Add proguard rules untuk background services
+            isMinifyEnabled = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+    }
+    
+    // ✅ Add packaging options
+    packagingOptions {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
 }
@@ -41,6 +57,16 @@ flutter {
 }
 
 dependencies {
+    // ✅ Core Android dependencies
+    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+    
+    // ✅ Service compat untuk foreground service type
+    implementation("androidx.core:core:1.12.0")
+    
+    // ✅ Multidex support
+    implementation("androidx.multidex:multidex:2.0.1")
+    
     // ✅ tambahin desugaring libs
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 }

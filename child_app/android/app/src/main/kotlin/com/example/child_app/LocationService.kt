@@ -8,6 +8,7 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
@@ -16,6 +17,7 @@ import android.os.Bundle
 import android.os.IBinder
 import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 
 class LocationService : Service(), LocationListener {
     private lateinit var locationManager: LocationManager
@@ -55,7 +57,26 @@ class LocationService : Service(), LocationListener {
         }
 
         val notification = createNotification()
-        startForeground(NOTIFICATION_ID, notification)
+        
+        // ✅ Use ServiceCompat for proper foreground service type handling
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                ServiceCompat.startForeground(
+                    this,
+                    NOTIFICATION_ID,
+                    notification,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                )
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(NOTIFICATION_ID, notification)
+            } else {
+                startForeground(NOTIFICATION_ID, notification)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            // Fallback to regular startForeground
+            startForeground(NOTIFICATION_ID, notification)
+        }
 
         try {
             locationManager.requestLocationUpdates(
