@@ -82,22 +82,15 @@ class FamilyController extends Controller
     {
         $user = $request->user();
 
-        $familyMember = FamilyMember::where('user_id', $user->id)->first();
-
-        if (!$familyMember) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Not part of any family'
-            ], 404);
-        }
-
-        $members = FamilyMember::with('user')
-            ->where('family_id', $familyMember->family_id)
+        // Ambil semua family yang dibuat oleh user login
+        $families = Family::with(['creator', 'members.user'])
+            ->where('created_by', $user->id)
+            ->orderBy('created_at', 'desc') // 🔹 terbaru di atas
             ->get();
 
         return response()->json([
             'success' => true,
-            'members' => $members
+            'families' => $families
         ]);
     }
 }

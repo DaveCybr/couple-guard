@@ -1,3 +1,4 @@
+import 'package:couple_guard/modules/auth/src/screens/family_screen.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../providers/auth_provider.dart';
@@ -12,6 +13,183 @@ class DashboardScreen extends StatefulWidget {
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class WaveClipper extends CustomClipper<ui.Path> {
+  final double waveHeight;
+
+  WaveClipper({this.waveHeight = 40});
+
+  @override
+  ui.Path getClip(Size size) {
+    ui.Path path = ui.Path();
+
+    // Mulai dari pojok kiri atas
+    path.lineTo(0, size.height - waveHeight);
+
+    // Wave pertama
+    path.cubicTo(
+      size.width * 0.15,
+      size.height - (waveHeight - 20),
+      size.width * 0.25,
+      size.height - (waveHeight + 5),
+      size.width * 0.4,
+      size.height - (waveHeight - 5),
+    );
+
+    // Wave kedua
+    path.cubicTo(
+      size.width * 0.55,
+      size.height - (waveHeight - 15),
+      size.width * 0.7,
+      size.height - (waveHeight + 10),
+      size.width * 0.85,
+      size.height - (waveHeight - 10),
+    );
+
+    // Wave terakhir
+    path.cubicTo(
+      size.width * 0.92,
+      size.height - (waveHeight - 20),
+      size.width * 0.97,
+      size.height - (waveHeight - 25),
+      size.width,
+      size.height - waveHeight,
+    );
+
+    // Tutup path dengan benar
+    path.lineTo(size.width, 0);
+    path.lineTo(0, 0);
+    path.close();
+
+    return path;
+  }
+
+  @override
+  bool shouldReclip(CustomClipper<ui.Path> oldClipper) => false; // Ubah ke false untuk performa
+}
+
+class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
+  const CustomAppBar({Key? key}) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: preferredSize.height,
+      child: Stack(
+        children: [
+          // Background gradient dengan wave
+          ClipPath(
+            clipper: WaveClipper(waveHeight: 20), // Kurangi tinggi wave
+            child: Container(
+              height: preferredSize.height,
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Color(0xFF4A85F6), // lebih terang dari base
+                    Color(0xFF0056F1), // base color
+                    Color(0xFF003C9D), // lebih gelap dari base
+                  ],
+                  stops: [0.0, 0.6, 1.0],
+                ),
+              ),
+            ),
+          ),
+
+          // Konten AppBar
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 16.0,
+                vertical: 16.0,
+              ),
+              child: Consumer<AuthProvider>(
+                builder: (context, auth, _) {
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(26),
+                              ),
+                              child: CircleAvatar(
+                                radius: 22,
+                                backgroundImage: NetworkImage(
+                                  'https://ui-avatars.com/api/?name=${Uri.encodeComponent(auth.user?.name ?? "User")}&background=random&color=fff&size=128',
+                                ),
+                                onBackgroundImageError: (
+                                  exception,
+                                  stackTrace,
+                                ) {
+                                  // Handle error jika gagal load image
+                                },
+                                child:
+                                    auth.user?.name == null
+                                        ? const Icon(
+                                          Icons.person,
+                                          color: Colors.grey,
+                                        )
+                                        : null,
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    auth.user?.name ?? "User Name",
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w500,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  Text(
+                                    auth.user?.email ?? "user@email.com",
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.white70,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.security,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Size get preferredSize => const Size.fromHeight(130); // Kurangi tinggi AppBar
 }
 
 class BottomNavBackgroundPainter extends CustomPainter {
@@ -592,7 +770,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             // Date Header
             Container(
               alignment: Alignment.centerLeft,
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              margin: const EdgeInsets.symmetric(horizontal: 28, vertical: 4),
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 12,
@@ -600,13 +778,32 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.primary, width: 1.5),
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(10),
+                    topRight: Radius.circular(10),
+                    bottomLeft: Radius.zero, // pojok bawah kiri tetap kotak
+                    bottomRight: Radius.zero, // pojok bawah kanan tetap kotak
+                  ),
+                  border: Border(
+                    top: BorderSide(
+                      color: AppColors.primary.withOpacity(0.2),
+                      width: 1.5,
+                    ),
+                    left: BorderSide(
+                      color: AppColors.primary.withOpacity(0.2),
+                      width: 1.5,
+                    ),
+                    right: BorderSide(
+                      color: AppColors.primary.withOpacity(0.2),
+                      width: 1.5,
+                    ),
+                    bottom: BorderSide.none, // bawah tidak ada border
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: AppColors.primary.withOpacity(0.1),
                       blurRadius: 8,
-                      offset: const Offset(0, 2),
+                      offset: const Offset(0, 6),
                     ),
                   ],
                 ),
@@ -949,8 +1146,13 @@ class _DashboardScreenState extends State<DashboardScreen>
     final settings = [
       {
         'icon': Icons.person,
-        'title': 'Profil Anak',
-        'subtitle': 'Kelola profil anak',
+        'title': 'Profil Saya',
+        'subtitle': 'Kelola profil saya',
+      },
+      {
+        'icon': Icons.family_restroom,
+        'title': 'Keluarga',
+        'subtitle': 'Kelola keluarga',
       },
     ];
 
@@ -1011,7 +1213,30 @@ class _DashboardScreenState extends State<DashboardScreen>
                 color: Colors.grey,
               ),
               onTap: () {
-                if (setting['title'] == 'Kode') {
+                if (setting['title'] == 'Keluarga') {
+                  final authProvider = Provider.of<AuthProvider>(
+                    context,
+                    listen: false,
+                  );
+                  final token = authProvider.token;
+
+                  if (token != null) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => FamilyScreen(authToken: token),
+                      ),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                          'Token tidak tersedia, silakan login ulang',
+                        ),
+                      ),
+                    );
+                  }
+                } else if (setting['title'] == 'Kode') {
                   // 🔹 tampilkan kode unik di popup
                   showDialog(
                     context: context,
@@ -1129,29 +1354,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF1F5F9),
-      appBar: AppBar(
-        backgroundColor: AppColors.primary,
-        elevation: 0,
-        title: Consumer<AuthProvider>(
-          builder: (context, auth, _) {
-            return Row(
-              children: [
-                const Icon(Icons.shield, color: Colors.white, size: 24),
-                const SizedBox(width: 8),
-                Text(
-                  'Couple Guard - ${auth.user?.name ?? ""}', // tampilkan nama
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-
+      appBar: CustomAppBar(),
       body: IndexedStack(
         index: _selectedIndex,
         children: [
@@ -1160,44 +1363,47 @@ class _DashboardScreenState extends State<DashboardScreen>
           _buildSettingsPage(),
         ],
       ),
-      bottomNavigationBar: SizedBox(
-        height: 110,
-        child: AnimatedBuilder(
-          animation: _curveAnimation,
-          builder: (context, child) {
-            return Stack(
-              clipBehavior: Clip.none,
-              children: [
-                CustomPaint(
-                  size: Size(MediaQuery.of(context).size.width, 110),
-                  painter: BottomNavBackgroundPainter(
-                    activeIndex: _curveAnimation.value,
-                    totalItems: 3,
+      bottomNavigationBar: Container(
+        margin: const EdgeInsets.only(top: 34), // Tambahkan margin atas
+        child: SizedBox(
+          height: 110,
+          child: AnimatedBuilder(
+            animation: _curveAnimation,
+            builder: (context, child) {
+              return Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  CustomPaint(
+                    size: Size(MediaQuery.of(context).size.width, 110),
+                    painter: BottomNavBackgroundPainter(
+                      activeIndex: _curveAnimation.value,
+                      totalItems: 3,
+                    ),
                   ),
-                ),
-                Positioned.fill(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: List.generate(3, (index) {
-                      return _buildNavItem(
-                        index == 0
-                            ? Icons.notifications
-                            : index == 1
-                            ? Icons.smartphone
-                            : Icons.person,
-                        index == 0
-                            ? "Notifikasi"
-                            : index == 1
-                            ? "Beranda"
-                            : "Saya",
-                        index,
-                      );
-                    }),
+                  Positioned.fill(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: List.generate(3, (index) {
+                        return _buildNavItem(
+                          index == 0
+                              ? Icons.notifications
+                              : index == 1
+                              ? Icons.home
+                              : Icons.settings,
+                          index == 0
+                              ? "Notifikasi"
+                              : index == 1
+                              ? "Beranda"
+                              : "Pengaturan",
+                          index,
+                        );
+                      }),
+                    ),
                   ),
-                ),
-              ],
-            );
-          },
+                ],
+              );
+            },
+          ),
         ),
       ),
     );

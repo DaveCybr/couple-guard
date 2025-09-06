@@ -58,16 +58,14 @@ class AuthProvider with ChangeNotifier {
     _setLoading(true);
     try {
       final user = await _authService.login(email, password);
+      // 🔹 Sekarang user sudah termasuk token
 
       _user = user;
+      _token = user.token; // 🔹 ambil token dari UserModel
 
-      // kalau API mengembalikan token, simpan juga
-      // misal token ada di response auth, tambahkan return di AuthService.login
-      // sementara ini pakai null-check
       if (_token != null) {
         await _secureStorage.saveToken(_token!);
       }
-
       await _secureStorage.saveUser(_user!);
 
       _status = AuthStatus.authenticated;
@@ -99,7 +97,11 @@ class AuthProvider with ChangeNotifier {
       );
 
       _user = user;
+      _token = user.token; // 🔹 ambil token dari UserModel
 
+      if (_token != null) {
+        await _secureStorage.saveToken(_token!);
+      }
       await _secureStorage.saveUser(_user!);
 
       _status = AuthStatus.authenticated;
@@ -113,12 +115,11 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  /// 🔹 Logout (hapus token di server + clear storage)
   Future<void> logout() async {
     _setLoading(true);
     try {
-      if (_token != null) {
-        await _authService.logout(_token!);
+      if (_user?.token != null) {
+        await _authService.logout(_user!.token!);
       }
     } catch (e) {
       debugPrint('Logout API error: $e');
@@ -128,7 +129,6 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  /// 🔹 Bersihkan state auth & storage
   Future<void> _clearAuth() async {
     _token = null;
     _user = null;

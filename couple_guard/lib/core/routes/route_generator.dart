@@ -1,10 +1,12 @@
 // core/routes/route_generator.dart
 import 'package:couple_guard/modules/auth/src/screens/dashboard_screen.dart';
+import 'package:couple_guard/modules/auth/src/screens/family_screen.dart';
 import 'package:flutter/material.dart';
 import './app_routes.dart';
 import 'package:couple_guard/onboarding_screen.dart';
 import '../../modules/auth/src/screens/login_screen.dart';
 import '../../modules/auth/src/screens/register_screen.dart';
+import '../../modules/auth/src/screens/family_screen.dart';
 
 // import lainnya sesuai kebutuhan
 
@@ -28,6 +30,10 @@ class RouteGenerator {
       case AppRoutes.register:
         // return _createRoute(const RegisterScreen(), settings);
         return _createRoute(const RegisterScreen(), settings);
+
+      // case AppRoutes.family:
+      //   // return _createRoute(const RegisterScreen(), settings);
+      //   return _createRoute(const FamilyScreen(), settings);
 
       case AppRoutes.forgotPassword:
         return _createRoute(

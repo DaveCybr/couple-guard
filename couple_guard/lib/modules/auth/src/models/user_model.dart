@@ -7,6 +7,7 @@ class UserModel {
   final bool isEmailVerified;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final String? token; // 🔹 tambahin token
 
   UserModel({
     required this.id,
@@ -17,6 +18,7 @@ class UserModel {
     required this.isEmailVerified,
     required this.createdAt,
     required this.updatedAt,
+    this.token,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -29,6 +31,7 @@ class UserModel {
       isEmailVerified: json['email_verified_at'] != null,
       createdAt: DateTime.parse(json['created_at']),
       updatedAt: DateTime.parse(json['updated_at']),
+      token: json['token'], // 🔹 kalau API kasih token di level ini
     );
   }
 
@@ -42,6 +45,7 @@ class UserModel {
       'is_email_verified': isEmailVerified,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
+      'token': token,
     };
   }
 }

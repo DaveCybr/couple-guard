@@ -24,8 +24,10 @@ class AuthService {
       final responseData = jsonDecode(response.body);
 
       // Asumsikan API mengembalikan data user di field 'user'
-      return UserModel.fromJson(responseData['user']);
-
+      return UserModel.fromJson({
+        ...responseData['user'],
+        'token': responseData['token'], // 🔹 inject token ke dalam user
+      });
       // ATAU jika data user langsung di root level:
       // return UserModel.fromJson(responseData);
     } else {
@@ -47,7 +49,6 @@ class AuthService {
       "role": role,
     };
 
-    // hanya tambahkan phone kalau user mengisi
     if (phone != null && phone.isNotEmpty) {
       body["phone"] = phone;
     }
@@ -64,11 +65,11 @@ class AuthService {
     if (response.statusCode == 201) {
       final responseData = jsonDecode(response.body);
 
-      // Asumsikan API mengembalikan data user di field 'user'
-      return UserModel.fromJson(responseData['user']);
-
-      // ATAU jika data user langsung di root level:
-      // return UserModel.fromJson(responseData);
+      // Inject token juga ke UserModel
+      return UserModel.fromJson({
+        ...responseData['user'],
+        'token': responseData['token'], // 🔹 simpan token dari response
+      });
     } else {
       throw Exception("Register gagal: ${response.body}");
     }
@@ -108,22 +109,17 @@ class AuthService {
 
   /// Logout - invalidate token di server
   Future<void> logout(String token) async {
-    try {
-      final response = await http.post(
-        Uri.parse("$_baseUrl/auth/logout"),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-      );
+    final response = await http.post(
+      Uri.parse("$_baseUrl/auth/logout"),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+    );
 
-      if (response.statusCode != 200) {
-        throw Exception("Logout API failed: ${response.statusCode}");
-      }
-    } catch (e) {
-      throw Exception("Logout error: $e");
-      // Tidak throw error karena logout tetap dilakukan di client
+    if (response.statusCode != 200) {
+      throw Exception("Logout API failed: ${response.body}");
     }
   }
 
