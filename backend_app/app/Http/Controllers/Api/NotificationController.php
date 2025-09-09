@@ -618,21 +618,20 @@ class NotificationController extends Controller
      */
     protected function verifyParentChildRelationship($parentId, $childId): bool
     {
-        // Get parent's family
-        $parentFamilyMember = FamilyMember::where('user_id', $parentId)
+        $parentFamilyIds = FamilyMember::where('user_id', $parentId)
             ->where('role', 'parent')
-            ->first();
+            ->pluck('family_id');
 
-        if (!$parentFamilyMember) {
+        if ($parentFamilyIds->isEmpty()) {
             return false;
         }
 
-        // Check if child is in the same family
         return FamilyMember::where('user_id', $childId)
-            ->where('family_id', $parentFamilyMember->family_id)
+            ->whereIn('family_id', $parentFamilyIds)
             ->where('role', 'child')
             ->exists();
     }
+
 
     /**
      * Get notification summary for the list endpoint

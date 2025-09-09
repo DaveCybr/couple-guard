@@ -41,6 +41,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/create', [FamilyController::class, 'create']);
         Route::post('/join', [FamilyController::class, 'join']);
         Route::get('/members', [FamilyController::class, 'members']);
+        Route::get('/membersjoin', [FamilyController::class, 'membersjoin']);
         Route::get('/info', [FamilyController::class, 'info']);
         Route::put('/update', [FamilyController::class, 'update']);
         Route::delete('/leave', [FamilyController::class, 'leave']);

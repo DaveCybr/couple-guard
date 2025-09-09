@@ -76,6 +76,38 @@ class FamilyService {
       throw FamilyException(message: 'Network error: ${e.toString()}');
     }
   }
+
+  Future<List<GetFamily>> getJoinedFamilies({required String authToken}) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/family/membersjoin'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $authToken',
+          'Accept': 'application/json',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+
+        if (data['success'] == true && data['families'] != null) {
+          final families = data['families'] as List;
+          return families.map((f) => GetFamily.fromJson(f)).toList();
+        } else {
+          throw FamilyException(message: 'Invalid response format');
+        }
+      } else {
+        throw FamilyException(
+          message: 'Failed to fetch joined families',
+          statusCode: response.statusCode,
+        );
+      }
+    } catch (e) {
+      if (e is FamilyException) rethrow;
+      throw FamilyException(message: 'Network error: ${e.toString()}');
+    }
+  }
 }
 
 class GetFamily {

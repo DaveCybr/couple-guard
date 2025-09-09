@@ -7,6 +7,11 @@ import '../../../../core/routes/app_routes.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:ui' as ui;
+import '../services/family_service.dart';
+import '../services/notification_service.dart';
+import '../models/notification_model.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -263,14 +268,110 @@ class BottomNavBackgroundPainter extends CustomPainter {
 class _DashboardScreenState extends State<DashboardScreen>
     with SingleTickerProviderStateMixin {
   int _selectedIndex = 1;
-  String selectedChild = 'Sarah';
+  int? selectedChild;
   late AnimationController _animationController;
   late Animation<double> _curveAnimation;
+  String? _authToken;
+  final FamilyService _familyService = FamilyService();
+  List<GetFamily> _families = [];
+  bool _isLoading = false;
+  List<NotificationModel> _notifications = [];
+  bool _isLoadingNotifications = false;
+  Map<String, dynamic>? _pagination;
+  Map<String, dynamic>? _summary;
+
+  final NotificationService _notificationService = NotificationService();
+  Future<String?> fetchAppIcon(String packageName) async {
+    final apiKey =
+        "c8c3e9d70793274cd329b8523d5bad7383c8b1c7b0b65250d8cb1b41e3d0c686";
+    final url =
+        "https://serpapi.com/search.json?engine=google_play&q=$packageName&api_key=$apiKey";
+
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        // 1️⃣ Cek app_highlight
+        String? thumbnail = data['app_highlight']?['thumbnail'];
+
+        // 2️⃣ Kalau null, cek organic_results
+        if (thumbnail == null &&
+            data['organic_results'] != null &&
+            data['organic_results'] is List &&
+            data['organic_results'].isNotEmpty) {
+          final items = data['organic_results'][0]['items'];
+          if (items != null && items is List && items.isNotEmpty) {
+            thumbnail = items[0]['thumbnail'];
+          }
+        }
+
+        print("Package: $packageName, Thumbnail: $thumbnail");
+
+        if (thumbnail != null && thumbnail is String) {
+          return thumbnail;
+        }
+      } else {
+        print("Failed to fetch $packageName: ${response.statusCode}");
+      }
+    } catch (e) {
+      print("Error fetching $packageName: $e");
+    }
+
+    return null;
+  }
+
+  Future<void> _loadNotifications(int childId) async {
+    if (_authToken == null) {
+      debugPrint("❌ Tidak ada auth token, skip load notifications");
+      return;
+    }
+
+    setState(() {
+      _isLoadingNotifications = true;
+    });
+
+    try {
+      final result = await _notificationService.fetchNotifications(
+        authToken: _authToken!, // pakai token dari AuthProvider
+        childId: childId,
+        page: 1,
+        limit: 50,
+      );
+
+      setState(() {
+        _notifications = result['notifications'] as List<NotificationModel>;
+        _pagination = result['pagination'];
+        _summary = result['summary'];
+      });
+
+      debugPrint(
+        "✅ Berhasil load ${_notifications.length} notifikasi untuk child $childId",
+      );
+    } catch (e) {
+      debugPrint("❌ Error load notifications: $e");
+    } finally {
+      setState(() {
+        _isLoadingNotifications = false;
+      });
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    if (_authToken == null && authProvider.token != null) {
+      setState(() {
+        _authToken = authProvider.token;
+      });
+      _loadFamilies(); // panggil setelah token ada
+    }
+  }
 
   @override
   void initState() {
     super.initState();
-
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
@@ -282,6 +383,28 @@ class _DashboardScreenState extends State<DashboardScreen>
     ).animate(
       CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
     );
+  }
+
+  Future<void> _loadFamilies() async {
+    debugPrint("🔑 Auth token sekarang: $_authToken");
+    if (_authToken == null) {
+      debugPrint("❌ Token null, tidak bisa load families");
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      final families = await _familyService.getJoinedFamilies(
+        authToken: _authToken!,
+      );
+      setState(() {
+        _families = families;
+      });
+    } catch (e) {
+      debugPrint("❌ Error load families: $e");
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 
   void _onNavItemTapped(int newIndex) {
@@ -344,7 +467,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Pilih Anak',
+                  'Pilih Family',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -352,7 +475,39 @@ class _DashboardScreenState extends State<DashboardScreen>
                   ),
                 ),
                 const SizedBox(height: 12),
-                ...children.map((child) => _buildChildCard(child)).toList(),
+
+                if (_isLoading)
+                  const Center(child: CircularProgressIndicator())
+                else if (_families.isEmpty)
+                  const Text("Tidak ada family")
+                else if (_families.length <= 3)
+                  // tampilkan langsung tanpa scrollbar & tanpa padding kanan
+                  Column(
+                    children:
+                        _families
+                            .map((family) => _buildFamilyCard(family))
+                            .toList(),
+                  )
+                else
+                  SizedBox(
+                    height: 200, // cukup untuk ±3 item
+                    child: Scrollbar(
+                      thumbVisibility: true, // selalu tampil
+                      radius: const Radius.circular(8),
+                      child: ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        shrinkWrap: true,
+                        padding: const EdgeInsets.only(
+                          right: 8, // kasih jarak biar gak nabrak scrollbar
+                        ),
+                        itemCount: _families.length,
+                        itemBuilder: (context, index) {
+                          final family = _families[index];
+                          return _buildFamilyCard(family);
+                        },
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -580,13 +735,15 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  Widget _buildChildCard(Map<String, dynamic> child) {
-    final isSelected = selectedChild == child['name'];
+  Widget _buildFamilyCard(GetFamily family) {
+    final isSelected = selectedChild == family.id; // bandingkan dengan ID
     return GestureDetector(
       onTap: () {
         setState(() {
-          selectedChild = child['name'];
+          selectedChild = family.id; // simpan id
         });
+        _loadNotifications(family.id); // load notifications untuk child ini
+        debugPrint("👀 Sedang mengamati family ${family.id}");
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
@@ -601,40 +758,15 @@ class _DashboardScreenState extends State<DashboardScreen>
         ),
         child: Row(
           children: [
-            Text(child['avatar'], style: const TextStyle(fontSize: 24)),
+            const Icon(Icons.family_restroom, size: 28, color: Colors.blue),
             const SizedBox(width: 12),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        child['name'],
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const Spacer(),
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color:
-                              child['status'] == 'online'
-                                  ? Colors.green
-                                  : Colors.grey,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    '${child['location']} • Baterai ${child['battery']}%',
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
-                ],
+              child: Text(
+                family.name,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
               ),
             ),
           ],
@@ -644,118 +776,21 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   Widget _buildActivitiesPage() {
-    final notificationsByDate = {
-      '2025/08/20': [
-        {
-          'app': 'King\'s Choice',
-          'title': 'King\'s Choice',
-          'message':
-              'Yang Mulia, acara Perairan Baru dibuka dan telah siap untuk anda bergabung dalam kegembiraan!',
-          'time': '12:03',
-          'icon': 'game',
-          'category': 'Dev',
-        },
-        {
-          'app': 'King\'s Choice',
-          'title': 'King\'s Choice',
-          'message':
-              'Yang Mulia, acara Scarlet Beauty dibuka dan telah siap untuk anda bergabung dalam kegembiraan!',
-          'time': '12:03',
-          'icon': 'game',
-          'category': 'Dev',
-        },
-        {
-          'app': 'Instagram',
-          'title': 'farralunee_: -',
-          'message': 'ape',
-          'time': '12:02',
-          'icon': 'instagram',
-          'category': 'Dev',
-        },
-        {
-          'app': 'WhatsApp',
-          'title': '~ Diva MIF JTI POLIJE NEWW',
-          'message': 'Someone shared a message',
-          'time': '12:02',
-          'icon': 'whatsapp',
-          'category': 'Dev',
-        },
-        {
-          'app': 'Shopee',
-          'title': 'Shopee',
-          'message':
-              'Flash Sale dimulai! Dapatkan diskon hingga 90% untuk produk pilihan',
-          'time': '11:45',
-          'icon': 'shopee',
-          'category': 'Dev',
-        },
-        {
-          'app': 'Gmail',
-          'title': 'Google Account',
-          'message':
-              'Sign-in attempt was blocked. We prevented someone from signing in to your account.',
-          'time': '11:30',
-          'icon': 'gmail',
-          'category': 'Dev',
-        },
-      ],
-      '2025/08/19': [
-        {
-          'app': 'YouTube',
-          'title': 'YouTube',
-          'message':
-              'Kreator favorit Anda baru saja mengupload video baru: "Tutorial Flutter Advanced"',
-          'time': '20:15',
-          'icon': 'youtube',
-          'category': 'Dev',
-        },
-        {
-          'app': 'Telegram',
-          'title': 'Flutter Indonesia',
-          'message':
-              'Ada yang tahu cara fix error ini? RenderFlex overflowed...',
-          'time': '19:58',
-          'icon': 'telegram',
-          'category': 'Dev',
-        },
-        {
-          'app': 'Bank BCA',
-          'title': 'BCA mobile',
-          'message':
-              'Transaksi berhasil. Transfer ke 1234***789 sebesar Rp 50.000',
-          'time': '18:30',
-          'icon': 'bank',
-          'category': 'Dev',
-        },
-        {
-          'app': 'Spotify',
-          'title': 'Spotify',
-          'message':
-              'Discover Weekly Anda sudah siap! Temukan musik baru yang mungkin Anda sukai',
-          'time': '17:00',
-          'icon': 'spotify',
-          'category': 'Dev',
-        },
-        {
-          'app': 'Gojek',
-          'title': 'Gojek',
-          'message':
-              'Promo spesial untuk Anda! Diskon 50% untuk GoFood hingga Rp 25.000',
-          'time': '16:45',
-          'icon': 'gojek',
-          'category': 'Dev',
-        },
-        {
-          'app': 'Facebook',
-          'title': 'Facebook',
-          'message':
-              'John Doe dan 5 teman lainnya memposting sesuatu. Lihat update terbaru mereka.',
-          'time': '15:20',
-          'icon': 'facebook',
-          'category': 'Dev',
-        },
-      ],
-    };
+    // Group notifications by date (yyyy/MM/dd)
+    final Map<String, List<NotificationModel>> notificationsByDate = {};
+    for (var n in _notifications) {
+      final dateKey =
+          "${n.timestamp.year}/${n.timestamp.month.toString().padLeft(2, '0')}/${n.timestamp.day.toString().padLeft(2, '0')}";
+      notificationsByDate.putIfAbsent(dateKey, () => []).add(n);
+    }
+
+    if (_isLoadingNotifications) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_notifications.isEmpty) {
+      return const Center(child: Text("Belum ada notifikasi"));
+    }
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -778,26 +813,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                 ),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.only(
+                  borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(10),
                     topRight: Radius.circular(10),
-                    bottomLeft: Radius.zero, // pojok bawah kiri tetap kotak
-                    bottomRight: Radius.zero, // pojok bawah kanan tetap kotak
                   ),
-                  border: Border(
-                    top: BorderSide(
-                      color: AppColors.primary.withOpacity(0.2),
-                      width: 1.5,
-                    ),
-                    left: BorderSide(
-                      color: AppColors.primary.withOpacity(0.2),
-                      width: 1.5,
-                    ),
-                    right: BorderSide(
-                      color: AppColors.primary.withOpacity(0.2),
-                      width: 1.5,
-                    ),
-                    bottom: BorderSide.none, // bawah tidak ada border
+                  border: Border.all(
+                    color: AppColors.primary.withOpacity(0.2),
+                    width: 1.5,
                   ),
                   boxShadow: [
                     BoxShadow(
@@ -821,182 +843,35 @@ class _DashboardScreenState extends State<DashboardScreen>
             // Notifications for this date
             ListView.builder(
               shrinkWrap: true,
-              physics: NeverScrollableScrollPhysics(),
+              physics: const NeverScrollableScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: notifications.length,
               itemBuilder: (context, index) {
                 final activity = notifications[index];
 
-                // App icon based on type
+                // pilih ikon berdasarkan appPackage
                 Widget appIcon;
+                final pkg = activity.appPackage?.toLowerCase() ?? '';
 
-                switch (activity['icon']) {
-                  case 'game':
-                    appIcon = Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: Colors.orange.shade100,
-                      ),
-                      child: Icon(Icons.games, color: Colors.orange, size: 20),
-                    );
-                    break;
-                  case 'instagram':
-                    appIcon = Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        gradient: LinearGradient(
-                          colors: [Colors.purple, Colors.pink, Colors.orange],
-                        ),
-                      ),
-                      child: Icon(
-                        Icons.camera_alt,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    );
-                    break;
-                  case 'whatsapp':
-                    appIcon = Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: Colors.green,
-                      ),
-                      child: Icon(Icons.chat, color: Colors.white, size: 20),
-                    );
-                    break;
-                  case 'shopee':
-                    appIcon = Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: Colors.orange.shade600,
-                      ),
-                      child: Icon(
-                        Icons.shopping_bag,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    );
-                    break;
-                  case 'gmail':
-                    appIcon = Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: Colors.red.shade500,
-                      ),
-                      child: Icon(Icons.email, color: Colors.white, size: 20),
-                    );
-                    break;
-                  case 'youtube':
-                    appIcon = Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: Colors.red.shade600,
-                      ),
-                      child: Icon(
-                        Icons.play_arrow,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    );
-                    break;
-                  case 'telegram':
-                    appIcon = Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: Colors.blue.shade500,
-                      ),
-                      child: Icon(Icons.send, color: Colors.white, size: 20),
-                    );
-                    break;
-                  case 'bank':
-                    appIcon = Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: Colors.blue.shade700,
-                      ),
-                      child: Icon(
-                        Icons.account_balance,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    );
-                    break;
-                  case 'spotify':
-                    appIcon = Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: Colors.green.shade600,
-                      ),
-                      child: Icon(
-                        Icons.music_note,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    );
-                    break;
-                  case 'gojek':
-                    appIcon = Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: Colors.green.shade700,
-                      ),
-                      child: Icon(
-                        Icons.motorcycle,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    );
-                    break;
-                  case 'facebook':
-                    appIcon = Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        color: Colors.blue.shade600,
-                      ),
-                      child: Icon(
-                        Icons.facebook,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    );
-                    break;
-                  default:
-                    appIcon = Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
+                appIcon = FutureBuilder<String?>(
+                  future: fetchAppIcon(pkg),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return _buildIconBox(
+                        icon: Icons.notifications,
                         color: Colors.grey.shade300,
-                      ),
-                      child: Icon(
-                        Icons.notifications,
-                        color: Colors.grey.shade600,
-                        size: 20,
-                      ),
-                    );
-                }
+                      );
+                    } else if (snapshot.hasData && snapshot.data != null) {
+                      return _buildIconBox(imageUrl: snapshot.data);
+                    } else {
+                      // fallback ikon default jika gagal fetch
+                      return _buildIconBox(
+                        icon: Icons.notifications,
+                        color: Colors.grey.shade300,
+                      );
+                    }
+                  },
+                );
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
@@ -1025,15 +900,15 @@ class _DashboardScreenState extends State<DashboardScreen>
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
                                 Text(
-                                  activity['app']!,
+                                  activity.title ?? "-",
                                   style: const TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey,
-                                    fontWeight: FontWeight.w500,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.black,
                                   ),
                                 ),
                                 Text(
-                                  activity['time']!,
+                                  "${activity.timestamp.hour.toString().padLeft(2, '0')}:${activity.timestamp.minute.toString().padLeft(2, '0')}",
                                   style: const TextStyle(
                                     fontSize: 12,
                                     color: Colors.grey,
@@ -1041,18 +916,9 @@ class _DashboardScreenState extends State<DashboardScreen>
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              activity['title']!,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                                color: Colors.black,
-                              ),
-                            ),
                             const SizedBox(height: 4),
                             Text(
-                              activity['message']!,
+                              activity.content ?? "",
                               style: const TextStyle(
                                 fontSize: 14,
                                 color: Colors.black87,
@@ -1063,7 +929,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              activity['category']!,
+                              activity.category ?? "",
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey,
@@ -1078,12 +944,37 @@ class _DashboardScreenState extends State<DashboardScreen>
               },
             ),
 
-            // Add spacing after each date section
             if (dateIndex < notificationsByDate.keys.length - 1)
               const SizedBox(height: 16),
           ],
         );
       },
+    );
+  }
+
+  /// helper untuk bikin kotak ikon
+  Widget _buildIconBox({
+    Color? color,
+    Gradient? gradient,
+    IconData? icon,
+    Color iconColor = Colors.white,
+    String? imageUrl, // tambahkan
+  }) {
+    return Container(
+      width: 40,
+      height: 40,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: color,
+        gradient: gradient,
+      ),
+      child:
+          imageUrl != null
+              ? ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.network(imageUrl, fit: BoxFit.cover),
+              )
+              : Icon(icon, color: iconColor, size: 20),
     );
   }
 
@@ -1214,11 +1105,7 @@ class _DashboardScreenState extends State<DashboardScreen>
               ),
               onTap: () {
                 if (setting['title'] == 'Keluarga') {
-                  final authProvider = Provider.of<AuthProvider>(
-                    context,
-                    listen: false,
-                  );
-                  final token = authProvider.token;
+                  final token = _authToken;
 
                   if (token != null) {
                     Navigator.push(
