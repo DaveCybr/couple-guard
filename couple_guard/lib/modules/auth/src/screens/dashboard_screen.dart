@@ -1,3 +1,5 @@
+import 'package:couple_guard/modules/auth/src/screens/album_camera_screen.dart';
+import 'package:couple_guard/modules/auth/src/screens/camera_screen.dart';
 import 'package:couple_guard/modules/auth/src/screens/family_screen.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
@@ -755,7 +757,30 @@ class _DashboardScreenState extends State<DashboardScreen>
                   children: [
                     Expanded(
                       child: GestureDetector(
-                        onTap: () {},
+                        onTap: () {
+                          if (selectedChild != null && _authToken != null) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (context) => AlbumCameraScreen(
+                                      selectedChildId:
+                                          selectedChild!, // ✅ id anak
+                                      jwtToken: _authToken!, // ✅ token
+                                    ),
+                              ),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  "Pilih family dulu sebelum membuka kamera",
+                                ),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
                         child: Column(
                           children: const [
                             Icon(
@@ -822,7 +847,30 @@ class _DashboardScreenState extends State<DashboardScreen>
                   children: [
                     Expanded(
                       child: GestureDetector(
-                        onTap: () {},
+                        onTap: () {
+                          if (selectedChild != null && _authToken != null) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (context) => CameraScreen(
+                                      selectedChildId:
+                                          selectedChild!, // ✅ id anak
+                                      jwtToken: _authToken!, // ✅ token
+                                    ),
+                              ),
+                            );
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  "Pilih family dulu sebelum membuka kamera",
+                                ),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
                         child: Column(
                           children: const [
                             Icon(
@@ -836,6 +884,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                         ),
                       ),
                     ),
+
                     Expanded(
                       child: GestureDetector(
                         onTap: () {},

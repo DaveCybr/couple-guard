@@ -55,6 +55,11 @@ dependencies:
   barcode_widget: ^2.0.4
   web_socket_channel: ^3.0.3
   pusher_channels_flutter: ^2.4.0
+  camera: ^0.11.2
+  path: ^1.9.1
+  path_provider: ^2.1.5
+  video_player: ^2.10.0
+  chewie: ^1.12.1
 
 dev_dependencies:
   flutter_test:

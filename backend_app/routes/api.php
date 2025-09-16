@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\ScreenController;
 use App\Http\Controllers\Api\AlertController;
 use App\Http\Controllers\Api\SettingController;
 use App\Http\Controllers\Api\DashboardController;
+use App\Http\Controllers\Api\CameraController;
 // use App\Http\Controllers\Api\DeviceController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -25,7 +26,7 @@ Route::prefix('auth')->group(function () {
     Route::post('/register', [AuthController::class, 'register']);
     Route::post('/login', [AuthController::class, 'login']);
 });
-
+Route::middleware('auth:sanctum')->get('/camera/child/{childId}/{captureId}/stream', [CameraController::class, 'stream']);
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
 
@@ -121,6 +122,14 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::get('/child', [DashboardController::class, 'childDashboard']);
         Route::get('/analytics/{childId}', [DashboardController::class, 'childAnalytics']);
     });
+
+    //capture
+    Route::prefix('camera')->group(function () {
+        Route::post('/store', [CameraController::class, 'store']);
+        Route::get('/child/{childId}', [CameraController::class, 'listByChild']);
+        Route::get('/child/{childId}/{captureId}', [CameraController::class, 'show']);
+    });
+
 
     // Device Management
     // Route::prefix('device')->group(function () {
