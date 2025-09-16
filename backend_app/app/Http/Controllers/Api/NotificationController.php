@@ -16,6 +16,7 @@ use App\Events\AlertTriggered;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class NotificationController extends Controller
 {
@@ -289,6 +290,45 @@ class NotificationController extends Controller
                 'has_more' => $notifications->hasMorePages(),
             ],
             'summary' => $this->getNotificationSummary($childId, $request)
+        ]);
+    }
+    public function listDebug($childId, Request $request): JsonResponse
+    {
+        // Debug log
+        Log::info('ChildId requested: ' . $childId);
+        Log::info('Request params: ', $request->all());
+
+        if (!$this->verifyParentChildRelationship(auth()->user()->id, $childId)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized access'
+            ], 403);
+        }
+
+        // Hanya filter by child_user_id, hilangkan semua filter lain
+        $query = NotificationMirror::where('child_user_id', $childId)
+            ->with(['child:id,name,email']);
+
+        // Urutkan berdasarkan timestamp terbaru
+        $query->orderBy('timestamp', 'desc');
+
+        // Pagination sederhana, limit default 50
+        $limit = $request->limit ?? 50;
+        $notifications = $query->paginate($limit);
+
+        // Log jumlah data yang ditemukan
+        Log::info('Notifications found: ' . $notifications->total());
+
+        return response()->json([
+            'success' => true,
+            'data' => $notifications->items(),
+            'pagination' => [
+                'current_page' => $notifications->currentPage(),
+                'total_pages' => $notifications->lastPage(),
+                'per_page' => $notifications->perPage(),
+                'total_items' => $notifications->total(),
+                'has_more' => $notifications->hasMorePages(),
+            ],
         ]);
     }
 

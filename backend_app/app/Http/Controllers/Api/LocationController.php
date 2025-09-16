@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use App\Events\LocationUpdated;
 use App\Events\AlertTriggered;
+use Illuminate\Support\Facades\Log;
 
 class LocationController extends Controller
 {
@@ -54,8 +55,15 @@ class LocationController extends Controller
             $request->longitude
         );
 
+        Log::info("Broadcasting LocationUpdated event for user: {$user->id}");
+
         // Broadcast real-time location update
-        broadcast(new LocationUpdated($location));
+        try {
+            broadcast(new LocationUpdated($location))->toOthers();
+            Log::info("LocationUpdated event broadcasted successfully");
+        } catch (\Exception $e) {
+            Log::error("Failed to broadcast LocationUpdated: " . $e->getMessage());
+        }
 
         return response()->json([
             'success' => true,
@@ -401,17 +409,19 @@ class LocationController extends Controller
 
     private function verifyParentChildRelationship($parentId, $childId): bool
     {
-        $parentMember = FamilyMember::where('user_id', $parentId)
-            ->where('role', 'parent')
-            ->first();
-
-        if (!$parentMember) return false;
-
+        // Cari child dulu untuk tahu family_id-nya
         $childMember = FamilyMember::where('user_id', $childId)
-            ->where('family_id', $parentMember->family_id)
             ->where('role', 'child')
             ->first();
 
-        return $childMember !== null;
+        if (!$childMember) return false;
+
+        // Cek apakah parent ada di family yang sama dengan child
+        $parentMember = FamilyMember::where('user_id', $parentId)
+            ->where('family_id', $childMember->family_id)
+            ->where('role', 'parent')
+            ->first();
+
+        return $parentMember !== null;
     }
 }

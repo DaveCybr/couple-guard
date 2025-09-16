@@ -53,6 +53,8 @@ dependencies:
   flutter_map: ^8.2.1
   latlong2: ^0.9.1
   barcode_widget: ^2.0.4
+  web_socket_channel: ^3.0.3
+  pusher_channels_flutter: ^2.4.0
 
 dev_dependencies:
   flutter_test:

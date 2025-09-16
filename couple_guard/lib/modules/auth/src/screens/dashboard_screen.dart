@@ -9,15 +9,165 @@ import 'package:latlong2/latlong.dart';
 import 'dart:ui' as ui;
 import '../services/family_service.dart';
 import '../services/notification_service.dart';
+import '../services/location_service.dart';
 import '../models/notification_model.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:pusher_channels_flutter/pusher_channels_flutter.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class RealtimeMapWidget extends StatefulWidget {
+  final int familyId;
+  final String authToken;
+
+  const RealtimeMapWidget({
+    Key? key,
+    required this.familyId,
+    required this.authToken,
+  }) : super(key: key);
+
+  @override
+  State<RealtimeMapWidget> createState() => _RealtimeMapWidgetState();
+}
+
+class _RealtimeMapWidgetState extends State<RealtimeMapWidget> {
+  final MapController _mapController = MapController();
+  late LocationPusherService _locationService;
+  LatLng _childLocation = const LatLng(-6.200000, 106.816666);
+  bool _isMapReady = false;
+  bool _isLocationLoaded = false; // Tambahkan flag ini
+
+  @override
+  void initState() {
+    super.initState();
+
+    _locationService = LocationPusherService(
+      authToken: widget.authToken,
+      familyId: widget.familyId,
+    );
+
+    _initLocation();
+  }
+
+  Future<void> _initLocation() async {
+    debugPrint("🌐 Memulai fetch lokasi awal...");
+
+    // Ambil lokasi awal
+    final initialLocation = await _locationService.fetchInitialLocation();
+
+    if (initialLocation != null) {
+      debugPrint(
+        "✅ Lokasi awal berhasil didapat: ${initialLocation.latitude}, ${initialLocation.longitude}",
+      );
+      setState(() {
+        _childLocation = initialLocation;
+        _isLocationLoaded = true; // Set flag bahwa lokasi sudah loaded
+      });
+
+      // Jika map sudah ready, langsung move ke lokasi baru
+      if (_isMapReady) {
+        _mapController.move(_childLocation, 14);
+        debugPrint(
+          "🗺️ Map dipindah ke lokasi: ${_childLocation.latitude}, ${_childLocation.longitude}",
+        );
+      }
+    } else {
+      debugPrint(
+        "⚠️ Gagal mendapatkan lokasi awal dari API, pakai default: ${_childLocation.latitude}, ${_childLocation.longitude}",
+      );
+      setState(() {
+        _isLocationLoaded = true; // Tetap set true meski pakai default
+      });
+    }
+
+    debugPrint("⚡️ Memulai inisialisasi Pusher...");
+    // Inisialisasi Pusher
+    await _locationService.initPusher(
+      onLocationUpdated: (newLoc) {
+        debugPrint(
+          "📡 Event location.updated diterima: ${newLoc.latitude}, ${newLoc.longitude}",
+        );
+        setState(() {
+          _childLocation = newLoc;
+        });
+
+        if (_isMapReady) {
+          _mapController.move(_childLocation, _mapController.camera.zoom);
+          debugPrint(
+            "🗺️ Map dipindah ke lokasi update: ${newLoc.latitude}, ${newLoc.longitude}",
+          );
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _locationService.dispose();
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 200,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child:
+            _isLocationLoaded
+                ? FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: _childLocation, // Sekarang sudah benar
+                    initialZoom: 14,
+                    onMapReady: () {
+                      setState(() => _isMapReady = true);
+
+                      // Pastikan map berada di lokasi yang benar setelah ready
+                      WidgetsBinding.instance.addPostFrameCallback((_) {
+                        _mapController.move(_childLocation, 14);
+                        debugPrint(
+                          "🗺️ Map ready dan dipindah ke: ${_childLocation.latitude}, ${_childLocation.longitude}",
+                        );
+                      });
+                    },
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate:
+                          'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      subdomains: const ['a', 'b', 'c'],
+                    ),
+                    MarkerLayer(
+                      markers: [
+                        Marker(
+                          point: _childLocation,
+                          width: 40,
+                          height: 40,
+                          child: const Icon(
+                            Icons.location_pin,
+                            color: Colors.red,
+                            size: 40,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                )
+                : const Center(
+                  child:
+                      CircularProgressIndicator(), // Loading saat fetch lokasi
+                ),
+      ),
+    );
+  }
 }
 
 class WaveClipper extends CustomClipper<ui.Path> {
@@ -541,39 +691,16 @@ class _DashboardScreenState extends State<DashboardScreen>
                 const SizedBox(height: 12),
 
                 // Map view pakai flutter_map
-                SizedBox(
-                  height: 200,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: FlutterMap(
-                      options: MapOptions(
-                        initialCenter: LatLng(-6.200000, 106.816666), // Jakarta
-                        initialZoom: 14,
-                      ),
-                      children: [
-                        TileLayer(
-                          urlTemplate:
-                              'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                          subdomains: const ['a', 'b', 'c'],
-                        ),
-                        MarkerLayer(
-                          markers: [
-                            Marker(
-                              point: LatLng(-6.200000, 106.816666),
-                              width: 40,
-                              height: 40,
-                              child: const Icon(
-                                Icons.location_pin,
-                                color: Colors.red,
-                                size: 40,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+                if (_authToken != null && selectedChild != null)
+                  RealtimeMapWidget(
+                    key: ValueKey(
+                      selectedChild,
+                    ), // reset state kalau ganti child
+                    familyId: selectedChild!,
+                    authToken: _authToken!,
+                  )
+                else
+                  _buildEmptyMapWidget(),
                 const SizedBox(height: 12),
 
                 Row(
@@ -731,6 +858,61 @@ class _DashboardScreenState extends State<DashboardScreen>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyMapWidget() {
+    return Container(
+      height: 200, // Sama dengan RealtimeMapWidget
+      decoration: BoxDecoration(
+        color: Colors.grey[200], // Background abu-abu terang
+        borderRadius: BorderRadius.circular(
+          16,
+        ), // Sama dengan RealtimeMapWidget
+        border: Border.all(color: Colors.grey[300]!, width: 1),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // Icon map dengan garis coret
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                Icon(Icons.map_outlined, size: 64, color: Colors.grey[500]),
+                // Garis coret diagonal
+                Transform.rotate(
+                  angle: -0.785398, // -45 derajat dalam radian
+                  child: Container(
+                    width: 85,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.red[400],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Text utama
+            Text(
+              'Select Family Member',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
+            const SizedBox(height: 4),
+            // Text subtitle
+            Text(
+              'to view location on map',
+              style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1035,11 +1217,6 @@ class _DashboardScreenState extends State<DashboardScreen>
 
   Widget _buildSettingsPage() {
     final settings = [
-      {
-        'icon': Icons.person,
-        'title': 'Profil Saya',
-        'subtitle': 'Kelola profil saya',
-      },
       {
         'icon': Icons.family_restroom,
         'title': 'Keluarga',

@@ -12,7 +12,7 @@ use App\Http\Controllers\Api\SettingController;
 use App\Http\Controllers\Api\DashboardController;
 // use App\Http\Controllers\Api\DeviceController;
 use Illuminate\Http\Request;
-
+use Illuminate\Support\Facades\Log;
 
 /*
 |--------------------------------------------------------------------------
@@ -75,7 +75,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('/batch-send', [NotificationController::class, 'batchSend']);
 
         // Parent app endpoints
-        Route::get('/list/{childId}', [NotificationController::class, 'list']);
+        Route::get('/list/{childId}', [NotificationController::class, 'listDebug']);
         Route::get('/unread/{childId}', [NotificationController::class, 'unread']);
         Route::post('/mark-read', [NotificationController::class, 'markRead']);
         Route::get('/statistics/{childId}', [NotificationController::class, 'statistics']);
@@ -133,5 +133,46 @@ Route::middleware('auth:sanctum')->group(function () {
 
 // WebSocket Broadcasting Authentication
 Route::middleware('auth:sanctum')->post('/broadcasting/auth', function (Request $request) {
-    return response()->json(['status' => 'success']);
+    try {
+        // Ambil user yang terautentikasi
+        $user = $request->user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Unauthorized'], 401);
+        }
+
+        // Ambil parameter dari request
+        $socketId = $request->input('socket_id');
+        $channelName = $request->input('channel_name');
+
+        // Validasi apakah user boleh akses channel ini
+        // Contoh: private-family.2 -> user harus bisa akses family dengan ID 2
+        if (strpos($channelName, 'private-family.') === 0) {
+            $familyId = str_replace('private-family.', '', $channelName);
+
+            // Tambahkan validasi sesuai logic bisnis Anda
+            // Misalnya: cek apakah user adalah member dari family ini
+            // $family = Family::find($familyId);
+            // if (!$family || !$family->hasMember($user)) {
+            //     return response()->json(['message' => 'Forbidden'], 403);
+            // }
+        }
+
+        // Buat Pusher instance
+        $pusher = new \Pusher\Pusher(
+            config('broadcasting.connections.pusher.key'),
+            config('broadcasting.connections.pusher.secret'),
+            config('broadcasting.connections.pusher.app_id'),
+            config('broadcasting.connections.pusher.options', [])
+        );
+
+        // Generate authorization signature
+        $auth = $pusher->socket_auth($channelName, $socketId);
+
+        // Return raw auth string (bukan JSON!)
+        return response()->json(json_decode($auth, true));
+    } catch (Exception $e) {
+        Log::error('Pusher auth error: ' . $e->getMessage());
+        return response()->json(['error' => 'Authorization failed'], 500);
+    }
 });
