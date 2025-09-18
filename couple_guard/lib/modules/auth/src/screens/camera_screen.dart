@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'dart:async';
 import 'dart:io';
 import '../services/camera_service.dart';
+import '../../../../core/constants/app_colors.dart';
+import './loading_screen.dart';
 
 enum CaptureMode { photo, video }
 
@@ -38,6 +40,12 @@ class _CameraScreenState extends State<CameraScreen>
   Timer? _timer;
   String _recordDuration = "00:00";
   final CameraService _cameraService = CameraService();
+
+  // Zoom variables
+  double _currentZoomLevel = 1.0;
+  double _minZoomLevel = 1.0;
+  double _maxZoomLevel = 1.0;
+  double _baseScale = 1.0;
 
   @override
   void initState() {
@@ -132,6 +140,11 @@ class _CameraScreenState extends State<CameraScreen>
       await _cameraController!.initialize();
       await _cameraController!.setFlashMode(FlashMode.off);
 
+      // Initialize zoom levels
+      _maxZoomLevel = await _cameraController!.getMaxZoomLevel();
+      _minZoomLevel = await _cameraController!.getMinZoomLevel();
+      _currentZoomLevel = _minZoomLevel;
+
       if (mounted) {
         setState(() {
           _isInitialized = true;
@@ -166,12 +179,86 @@ class _CameraScreenState extends State<CameraScreen>
 
       await _cameraController!.initialize();
 
+      // Reset zoom levels for new camera
+      _maxZoomLevel = await _cameraController!.getMaxZoomLevel();
+      _minZoomLevel = await _cameraController!.getMinZoomLevel();
+      _currentZoomLevel = _minZoomLevel;
+      await _cameraController!.setZoomLevel(_currentZoomLevel);
+
       if (mounted) {
         setState(() {});
       }
     } catch (e) {
       debugPrint("Error switching camera: $e");
     }
+  }
+
+  // Zoom functions
+  Future<void> _onScaleStart(ScaleStartDetails details) async {
+    _baseScale = _currentZoomLevel;
+  }
+
+  Future<void> _onScaleUpdate(ScaleUpdateDetails details) async {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      return;
+    }
+
+    final double scale = (_baseScale * details.scale).clamp(
+      _minZoomLevel,
+      _maxZoomLevel,
+    );
+
+    if (scale != _currentZoomLevel) {
+      _currentZoomLevel = scale;
+      await _cameraController!.setZoomLevel(_currentZoomLevel);
+      setState(() {});
+    }
+  }
+
+  Future<void> _zoomIn() async {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      return;
+    }
+
+    const double step = 0.5;
+    final double newZoom = (_currentZoomLevel + step).clamp(
+      _minZoomLevel,
+      _maxZoomLevel,
+    );
+
+    if (newZoom != _currentZoomLevel) {
+      _currentZoomLevel = newZoom;
+      await _cameraController!.setZoomLevel(_currentZoomLevel);
+      setState(() {});
+    }
+  }
+
+  Future<void> _zoomOut() async {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      return;
+    }
+
+    const double step = 0.5;
+    final double newZoom = (_currentZoomLevel - step).clamp(
+      _minZoomLevel,
+      _maxZoomLevel,
+    );
+
+    if (newZoom != _currentZoomLevel) {
+      _currentZoomLevel = newZoom;
+      await _cameraController!.setZoomLevel(_currentZoomLevel);
+      setState(() {});
+    }
+  }
+
+  Future<void> _resetZoom() async {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      return;
+    }
+
+    _currentZoomLevel = _minZoomLevel;
+    await _cameraController!.setZoomLevel(_currentZoomLevel);
+    setState(() {});
   }
 
   Future<void> _takePicture() async {
@@ -185,7 +272,13 @@ class _CameraScreenState extends State<CameraScreen>
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const Center(child: CircularProgressIndicator()),
+        builder:
+            (context) => const Center(
+              child: ParentalControlLoading(
+                primaryColor: AppColors.primary,
+                type: LoadingType.family,
+              ),
+            ),
       );
 
       final result = await _cameraService.uploadPhoto(file, childId, token);
@@ -254,7 +347,13 @@ class _CameraScreenState extends State<CameraScreen>
           context: context,
           barrierDismissible: false,
           builder:
-              (context) => const Center(child: CircularProgressIndicator()),
+              (context) => const Center(
+                child: ParentalControlLoading(
+                  primaryColor: AppColors.primary,
+                  type: LoadingType.family,
+                  message: "Loading..",
+                ),
+              ),
         );
 
         final result = await _cameraService.uploadVideo(file, childId, token);
@@ -291,6 +390,7 @@ class _CameraScreenState extends State<CameraScreen>
     required VoidCallback onTap,
     Color? color,
     Color? iconColor,
+    bool hasGlow = false,
   }) {
     return GestureDetector(
       onTap: onTap,
@@ -300,91 +400,251 @@ class _CameraScreenState extends State<CameraScreen>
         height: isBig ? 80 : 60,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: color ?? Colors.white,
-          border: Border.all(color: Colors.white, width: 3),
+          color: color ?? Colors.white.withOpacity(0.9),
+          border: Border.all(
+            color: Colors.white.withOpacity(0.8),
+            width: isBig ? 4 : 3,
+          ),
+          boxShadow:
+              hasGlow
+                  ? [
+                    BoxShadow(
+                      color: Colors.red.withOpacity(0.6),
+                      blurRadius: 10,
+                      spreadRadius: 2,
+                    ),
+                  ]
+                  : [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.3),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
         ),
         child: Icon(
           icon,
-          color: iconColor ?? Colors.black,
+          color: iconColor ?? Colors.grey[800],
           size: isBig ? 35 : 28,
         ),
       ),
     );
   }
 
+  Widget _buildZoomIndicator() {
+    // Hanya tampilkan ketika user sedang zoom (zoom level > minimum)
+    if (_currentZoomLevel <= _minZoomLevel) return const SizedBox.shrink();
+
+    return Positioned(
+      top: 120,
+      left: 0,
+      right: 0,
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.7),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withOpacity(0.3)),
+          ),
+          child: Text(
+            "${_currentZoomLevel.toStringAsFixed(1)}x",
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildZoomControls() {
+    // Tombol zoom dihilangkan, hanya menggunakan pinch gesture
+    return const SizedBox.shrink();
+  }
+
   Widget _buildControls() {
     return Positioned(
-      bottom: 60,
-      left: 20,
-      right: 20,
-      child: SizedBox(
-        height: 100,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // Foto button
-            AnimatedAlign(
-              duration: const Duration(milliseconds: 300),
-              alignment:
-                  _mode == CaptureMode.photo
-                      ? Alignment.bottomCenter
-                      : Alignment.bottomLeft,
-              child:
-                  _mode == CaptureMode.photo
-                      ? _buildButton(
-                        icon: Icons.camera_alt,
-                        isBig: true,
-                        onTap: _takePicture,
-                      )
-                      : _buildButton(
-                        icon: Icons.camera_alt,
-                        isBig: false,
-                        onTap: () {
-                          setState(() => _mode = CaptureMode.photo);
-                        },
-                      ),
-            ),
-
-            // Video button
-            AnimatedAlign(
-              duration: const Duration(milliseconds: 300),
-              alignment:
-                  _mode == CaptureMode.video
-                      ? Alignment.bottomCenter
-                      : Alignment.bottomLeft,
-              child:
-                  _mode == CaptureMode.video
-                      ? _buildButton(
-                        icon: _isRecording ? Icons.stop : Icons.videocam,
-                        isBig: true,
-                        onTap: _toggleRecording,
-                        color: _isRecording ? Colors.red : Colors.white,
-                        iconColor: _isRecording ? Colors.white : Colors.black,
-                      )
-                      : _buildButton(
-                        icon: Icons.videocam,
-                        isBig: false,
-                        onTap: () {
-                          setState(() => _mode = CaptureMode.video);
-                        },
-                      ),
-            ),
-
-            // Switch camera
-            Align(
-              alignment: Alignment.bottomRight,
-              child:
-                  _cameras.length > 1
-                      ? _buildButton(
-                        icon: Icons.flip_camera_ios,
-                        isBig: false,
-                        onTap: _switchCamera,
-                        color: Colors.black.withOpacity(0.5),
-                        iconColor: Colors.white,
-                      )
-                      : const SizedBox(width: 60),
+      bottom: 50,
+      left: 0,
+      right: 0,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              AppColors.primary.withOpacity(0.7),
+              AppColors.primary.withOpacity(0.9),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
             ),
           ],
+        ),
+        child: SizedBox(
+          height: 120,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Mode indicators
+              Positioned(
+                top: 0,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    // Tombol FOTO
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _mode = CaptureMode.photo;
+                        });
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                              _mode == CaptureMode.photo
+                                  ? Colors.white.withOpacity(0.9)
+                                  : Colors.transparent,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.5),
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          "FOTO",
+                          style: TextStyle(
+                            color:
+                                _mode == CaptureMode.photo
+                                    ? Colors.grey[800]
+                                    : Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 20),
+                    // Tombol VIDEO
+                    GestureDetector(
+                      onTap: () {
+                        setState(() {
+                          _mode = CaptureMode.video;
+                        });
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color:
+                              _mode == CaptureMode.video
+                                  ? Colors.white.withOpacity(0.9)
+                                  : Colors.transparent,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.5),
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          "VIDEO",
+                          style: TextStyle(
+                            color:
+                                _mode == CaptureMode.video
+                                    ? Colors.grey[800]
+                                    : Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Main capture button
+              Positioned(
+                bottom: 0,
+                child:
+                    _mode == CaptureMode.photo
+                        ? _buildButton(
+                          icon: Icons.camera_alt,
+                          isBig: true,
+                          onTap: _takePicture,
+                          color: Colors.white,
+                          iconColor: AppColors.primary,
+                        )
+                        : _buildButton(
+                          icon: _isRecording ? Icons.stop : Icons.videocam,
+                          isBig: true,
+                          onTap: _toggleRecording,
+                          color: _isRecording ? Colors.red : Colors.white,
+                          iconColor:
+                              _isRecording ? Colors.white : Colors.red[600],
+                          hasGlow: _isRecording,
+                        ),
+              ),
+
+              // Mode switcher (left)
+              Positioned(
+                bottom: 10,
+                left: 0,
+                child: _buildButton(
+                  icon:
+                      _mode == CaptureMode.photo
+                          ? Icons.videocam
+                          : Icons.camera_alt,
+                  isBig: false,
+                  onTap: () {
+                    setState(() {
+                      _mode =
+                          _mode == CaptureMode.photo
+                              ? CaptureMode.video
+                              : CaptureMode.photo;
+                    });
+                  },
+                  color: Colors.white.withOpacity(0.8),
+                  iconColor: Colors.grey[700],
+                ),
+              ),
+
+              // Switch camera (right)
+              Positioned(
+                bottom: 10,
+                right: 0,
+                child:
+                    _cameras.length > 1
+                        ? _buildButton(
+                          icon: Icons.flip_camera_ios,
+                          isBig: false,
+                          onTap: _switchCamera,
+                          color: Colors.white.withOpacity(0.8),
+                          iconColor: Colors.grey[700],
+                        )
+                        : const SizedBox(width: 60),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -393,23 +653,35 @@ class _CameraScreenState extends State<CameraScreen>
   Widget _buildRecordingIndicator() {
     if (!_isRecording) return const SizedBox.shrink();
     return Positioned(
-      top: 20,
+      top: 100,
       left: 0,
       right: 0,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.fiber_manual_record, color: Colors.red, size: 14),
-          const SizedBox(width: 6),
-          Text(
-            "REC $_recordDuration",
-            style: const TextStyle(
-              color: Colors.red,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 145),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: Colors.red,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.fiber_manual_record,
+              color: Colors.white,
+              size: 14,
             ),
-          ),
-        ],
+            const SizedBox(width: 6),
+            Text(
+              "REC $_recordDuration",
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -418,8 +690,10 @@ class _CameraScreenState extends State<CameraScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
+      extendBodyBehindAppBar: true,
+      extendBody: true,
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: AppColors.primary,
         title: const Text('Camera', style: TextStyle(color: Colors.white)),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
@@ -431,9 +705,29 @@ class _CameraScreenState extends State<CameraScreen>
         children: [
           if (_cameraController != null &&
               _cameraController!.value.isInitialized)
-            Center(child: CameraPreview(_cameraController!))
+            GestureDetector(
+              onScaleStart: _onScaleStart,
+              onScaleUpdate: _onScaleUpdate,
+              child: SizedBox.expand(
+                child: FittedBox(
+                  fit: BoxFit.cover,
+                  child: SizedBox(
+                    width: _cameraController!.value.previewSize!.height,
+                    height: _cameraController!.value.previewSize!.width,
+                    child: CameraPreview(_cameraController!),
+                  ),
+                ),
+              ),
+            )
           else
-            const Center(child: CircularProgressIndicator(color: Colors.white)),
+            const Center(
+              child: ParentalControlLoading(
+                primaryColor: AppColors.primary,
+                type: LoadingType.family,
+                message: "Loading..",
+              ),
+            ),
+          _buildZoomIndicator(),
           _buildControls(),
           _buildRecordingIndicator(),
         ],

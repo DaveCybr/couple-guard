@@ -3,6 +3,7 @@ import 'package:couple_guard/modules/auth/src/models/family_model.dart';
 import '../services/family_service.dart';
 import '../../../../core/constants/app_colors.dart';
 import 'package:barcode_widget/barcode_widget.dart';
+import './loading_screen.dart';
 
 class FamilyScreen extends StatefulWidget {
   final String authToken;
@@ -101,8 +102,11 @@ class _FamilyScreenState extends State<FamilyScreen> {
                     cursorColor: AppColors.primary,
                   ),
                   if (_isLoading) ...[
-                    SizedBox(height: 16),
-                    CircularProgressIndicator(color: AppColors.primary),
+                    ParentalControlLoading(
+                      primaryColor: AppColors.primary,
+                      type: LoadingType.family,
+                      message: "Proses..",
+                    ),
                   ],
                 ],
               ),
@@ -220,20 +224,10 @@ class _FamilyScreenState extends State<FamilyScreen> {
 
   Widget _buildLoadingState() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(color: AppColors.primary, strokeWidth: 3),
-          SizedBox(height: 16),
-          Text(
-            "Memuat data keluarga...",
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: AppColors.primary,
-            ),
-          ),
-        ],
+      child: ParentalControlLoading(
+        primaryColor: AppColors.primary,
+        type: LoadingType.family,
+        message: "Memuat data..",
       ),
     );
   }

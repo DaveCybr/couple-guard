@@ -1,175 +1,25 @@
 import 'package:couple_guard/modules/auth/src/screens/album_camera_screen.dart';
 import 'package:couple_guard/modules/auth/src/screens/camera_screen.dart';
 import 'package:couple_guard/modules/auth/src/screens/family_screen.dart';
+import 'package:couple_guard/modules/auth/src/screens/loading_screen.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../providers/auth_provider.dart';
 import 'package:provider/provider.dart';
 import '../../../../core/routes/app_routes.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 import 'dart:ui' as ui;
 import '../services/family_service.dart';
 import '../services/notification_service.dart';
-import '../services/location_service.dart';
 import '../models/notification_model.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:pusher_channels_flutter/pusher_channels_flutter.dart';
+import './realtime_location.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
-}
-
-class RealtimeMapWidget extends StatefulWidget {
-  final int familyId;
-  final String authToken;
-
-  const RealtimeMapWidget({
-    Key? key,
-    required this.familyId,
-    required this.authToken,
-  }) : super(key: key);
-
-  @override
-  State<RealtimeMapWidget> createState() => _RealtimeMapWidgetState();
-}
-
-class _RealtimeMapWidgetState extends State<RealtimeMapWidget> {
-  final MapController _mapController = MapController();
-  late LocationPusherService _locationService;
-  LatLng _childLocation = const LatLng(-6.200000, 106.816666);
-  bool _isMapReady = false;
-  bool _isLocationLoaded = false; // Tambahkan flag ini
-
-  @override
-  void initState() {
-    super.initState();
-
-    _locationService = LocationPusherService(
-      authToken: widget.authToken,
-      familyId: widget.familyId,
-    );
-
-    _initLocation();
-  }
-
-  Future<void> _initLocation() async {
-    debugPrint("🌐 Memulai fetch lokasi awal...");
-
-    // Ambil lokasi awal
-    final initialLocation = await _locationService.fetchInitialLocation();
-
-    if (initialLocation != null) {
-      debugPrint(
-        "✅ Lokasi awal berhasil didapat: ${initialLocation.latitude}, ${initialLocation.longitude}",
-      );
-      setState(() {
-        _childLocation = initialLocation;
-        _isLocationLoaded = true; // Set flag bahwa lokasi sudah loaded
-      });
-
-      // Jika map sudah ready, langsung move ke lokasi baru
-      if (_isMapReady) {
-        _mapController.move(_childLocation, 14);
-        debugPrint(
-          "🗺️ Map dipindah ke lokasi: ${_childLocation.latitude}, ${_childLocation.longitude}",
-        );
-      }
-    } else {
-      debugPrint(
-        "⚠️ Gagal mendapatkan lokasi awal dari API, pakai default: ${_childLocation.latitude}, ${_childLocation.longitude}",
-      );
-      setState(() {
-        _isLocationLoaded = true; // Tetap set true meski pakai default
-      });
-    }
-
-    debugPrint("⚡️ Memulai inisialisasi Pusher...");
-    // Inisialisasi Pusher
-    await _locationService.initPusher(
-      onLocationUpdated: (newLoc) {
-        debugPrint(
-          "📡 Event location.updated diterima: ${newLoc.latitude}, ${newLoc.longitude}",
-        );
-        setState(() {
-          _childLocation = newLoc;
-        });
-
-        if (_isMapReady) {
-          _mapController.move(_childLocation, _mapController.camera.zoom);
-          debugPrint(
-            "🗺️ Map dipindah ke lokasi update: ${newLoc.latitude}, ${newLoc.longitude}",
-          );
-        }
-      },
-    );
-  }
-
-  @override
-  void dispose() {
-    _locationService.dispose();
-    _mapController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 200,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child:
-            _isLocationLoaded
-                ? FlutterMap(
-                  mapController: _mapController,
-                  options: MapOptions(
-                    initialCenter: _childLocation, // Sekarang sudah benar
-                    initialZoom: 14,
-                    onMapReady: () {
-                      setState(() => _isMapReady = true);
-
-                      // Pastikan map berada di lokasi yang benar setelah ready
-                      WidgetsBinding.instance.addPostFrameCallback((_) {
-                        _mapController.move(_childLocation, 14);
-                        debugPrint(
-                          "🗺️ Map ready dan dipindah ke: ${_childLocation.latitude}, ${_childLocation.longitude}",
-                        );
-                      });
-                    },
-                  ),
-                  children: [
-                    TileLayer(
-                      urlTemplate:
-                          'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      subdomains: const ['a', 'b', 'c'],
-                    ),
-                    MarkerLayer(
-                      markers: [
-                        Marker(
-                          point: _childLocation,
-                          width: 40,
-                          height: 40,
-                          child: const Icon(
-                            Icons.location_pin,
-                            color: Colors.red,
-                            size: 40,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                )
-                : const Center(
-                  child:
-                      CircularProgressIndicator(), // Loading saat fetch lokasi
-                ),
-      ),
-    );
-  }
 }
 
 class WaveClipper extends CustomClipper<ui.Path> {
@@ -629,7 +479,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                 const SizedBox(height: 12),
 
                 if (_isLoading)
-                  const Center(child: CircularProgressIndicator())
+                  const Center(child: ParentalControlLoading(
+          primaryColor: AppColors.primary,
+          type: LoadingType.family,
+          message: "Memuat data..",
+        ),)
                 else if (_families.isEmpty)
                   const Text("Tidak ada family")
                 else if (_families.length <= 3)
@@ -1016,11 +870,23 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
 
     if (_isLoadingNotifications) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: ParentalControlLoading(
+          primaryColor: AppColors.primary,
+          type: LoadingType.family,
+          message: "Memuat data..",
+        ),
+      );
     }
 
     if (_notifications.isEmpty) {
       return const Center(child: Text("Belum ada notifikasi"));
+    }
+
+    if (selectedChild == null) {
+      return const Center(
+        child: Text("Pilih family dulu untuk melihat notifikasi"),
+      );
     }
 
     return ListView.builder(
@@ -1033,45 +899,59 @@ class _DashboardScreenState extends State<DashboardScreen>
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Date Header
+            // 🔹 Date Header + Reload hanya di tanggal pertama
             Container(
-              alignment: Alignment.centerLeft,
               margin: const EdgeInsets.symmetric(horizontal: 28, vertical: 4),
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(10),
-                    topRight: Radius.circular(10),
-                  ),
-                  border: Border.all(
-                    color: AppColors.primary.withOpacity(0.2),
-                    width: 1.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primary.withOpacity(0.1),
-                      blurRadius: 8,
-                      offset: const Offset(0, 6),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
                     ),
-                  ],
-                ),
-                child: Text(
-                  date,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.primary,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(10),
+                        topRight: Radius.circular(10),
+                      ),
+                      border: Border.all(
+                        color: AppColors.primary.withOpacity(0.2),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primary.withOpacity(0.1),
+                          blurRadius: 8,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      date,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.primary,
+                      ),
+                    ),
                   ),
-                ),
+
+                  // tampilkan tombol reload hanya sekali di header tanggal pertama
+                  if (dateIndex == 0)
+                    IconButton(
+                      icon: const Icon(Icons.refresh, color: Colors.blue),
+                      tooltip: "Reload",
+                      onPressed: () {
+                        _loadNotifications(selectedChild!); // fungsi refresh
+                      },
+                    ),
+                ],
               ),
             ),
 
-            // Notifications for this date
+            // 🔹 Notifications for this date
             ListView.builder(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),

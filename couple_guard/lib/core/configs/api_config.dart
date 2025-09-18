@@ -1,6 +1,6 @@
 // lib/core/config/api_config.dart
 class ApiConfig {
-  static const String baseUrl = 'http://192.168.100.106:8000/api';
+  static const String baseUrl = 'http://192.168.100.39:8000/api';
   static const String wsUrl = 'wss://api.coupleguard.app/ws';
   static const int connectionTimeout = 30;
   static const int receiveTimeout = 30;

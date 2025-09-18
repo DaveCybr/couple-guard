@@ -7,6 +7,7 @@ import '../providers/auth_provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/constants/app_constants.dart';
+import './loading_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({Key? key}) : super(key: key);
@@ -435,11 +436,10 @@ class _RegisterScreenState extends State<RegisterScreen>
                     ? const SizedBox(
                       height: 20,
                       width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          AppColors.white,
-                        ),
+                      child: ParentalControlLoading(
+                        primaryColor: AppColors.primary,
+                        type: LoadingType.family,
+                        message: "Memuat data..",
                       ),
                     )
                     : const Text(
