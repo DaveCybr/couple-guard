@@ -479,11 +479,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                 const SizedBox(height: 12),
 
                 if (_isLoading)
-                  const Center(child: ParentalControlLoading(
-          primaryColor: AppColors.primary,
-          type: LoadingType.family,
-          message: "Memuat data..",
-        ),)
+                  const Center(
+                    child: ParentalControlLoading(
+                      primaryColor: AppColors.primary,
+                      type: LoadingType.family,
+                      message: "Memuat data..",
+                    ),
+                  )
                 else if (_families.isEmpty)
                   const Text("Tidak ada family")
                 else if (_families.length <= 3)
