@@ -7,6 +7,7 @@ import '../providers/auth_provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/constants/app_constants.dart';
+import './loading_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({Key? key}) : super(key: key);
@@ -22,7 +23,9 @@ class _RegisterScreenState extends State<RegisterScreen>
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  final _phoneController = TextEditingController();
 
+  String? _selectedRole; // parent atau child
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
 
@@ -83,33 +86,65 @@ class _RegisterScreenState extends State<RegisterScreen>
   Future<void> _handleRegister() async {
     if (!_formKey.currentState!.validate()) return;
 
+    if (_selectedRole == null) {
+      _showErrorSnackBar("Please select a role");
+      return;
+    }
+
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-    final success = await authProvider.register(
-      _nameController.text.trim(),
-      _emailController.text.trim(),
-      _passwordController.text,
-    );
+    try {
+      final success = await authProvider.register(
+        _nameController.text.trim(),
+        _emailController.text.trim(),
+        _passwordController.text,
+        _selectedRole!,
+        phone:
+            _phoneController.text.trim().isEmpty
+                ? null
+                : _phoneController.text.trim(),
+      );
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    if (success) {
-      // kalau langsung ke dashboard
-      AppNavigator.pushReplacement(AppRoutes.dashboard);
+      if (success) {
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil(AppRoutes.dashboard, (route) => false);
+      } else {
+        _showErrorSnackBar("Registration failed, please try again.");
+      }
+    } catch (e) {
+      if (!mounted) return;
 
-      // atau kalau mau ke login dulu
-      // AppNavigator.pushReplacement(AppRoutes.login);
-    } else {
-      _showErrorSnackBar("Registration failed, please try again.");
-      
+      // Parse error message dari backend
+      String errorMessage = "Registration failed";
+
+      if (e.toString().contains('email has already been taken')) {
+        errorMessage = "Email sudah terdaftar, gunakan email lain";
+      } else if (e.toString().contains('validation')) {
+        errorMessage = "Data tidak valid, periksa kembali input Anda";
+      } else {
+        // Tampilkan error asli untuk debugging
+        errorMessage = e.toString().replaceAll(
+          'Exception: Register gagal: ',
+          '',
+        );
+      }
+
+      _showErrorSnackBar(errorMessage);
+
+      // Untuk debugging - hapus ini di production
+      print('Full error: $e');
     }
   }
 
   void _showErrorSnackBar(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: AppColors.error,
+        backgroundColor: AppColors.error, // pakai warna kamu
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
@@ -217,6 +252,10 @@ class _RegisterScreenState extends State<RegisterScreen>
             _buildNameField(),
             const SizedBox(height: AppConstants.defaultPadding),
             _buildEmailField(),
+            const SizedBox(height: AppConstants.defaultPadding),
+            _buildPhoneField(), // ✅ tambahan phone
+            const SizedBox(height: AppConstants.defaultPadding),
+            _buildRoleDropdown(), // ✅ tambahan role
             const SizedBox(height: AppConstants.defaultPadding),
             _buildPasswordField(),
             const SizedBox(height: AppConstants.defaultPadding),
@@ -334,6 +373,48 @@ class _RegisterScreenState extends State<RegisterScreen>
     );
   }
 
+  Widget _buildPhoneField() {
+    return TextFormField(
+      controller: _phoneController,
+      keyboardType: TextInputType.phone,
+      decoration: InputDecoration(
+        labelText: 'Phone (optional)',
+        prefixIcon: const Icon(Icons.phone_outlined),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRoleDropdown() {
+    return DropdownButtonFormField<String>(
+      value: _selectedRole,
+      items: const [
+        DropdownMenuItem(value: "parent", child: Text("Parent")),
+        DropdownMenuItem(value: "child", child: Text("Child")),
+      ],
+      onChanged: (value) {
+        setState(() {
+          _selectedRole = value;
+        });
+      },
+      decoration: InputDecoration(
+        labelText: "Role",
+        prefixIcon: const Icon(Icons.group_outlined),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
+        ),
+      ),
+      validator: (value) {
+        if (value == null) {
+          return "Please select a role";
+        }
+        return null;
+      },
+    );
+  }
+
   Widget _buildRegisterButton() {
     return Consumer<AuthProvider>(
       builder: (context, authProvider, child) {
@@ -355,11 +436,10 @@ class _RegisterScreenState extends State<RegisterScreen>
                     ? const SizedBox(
                       height: 20,
                       width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          AppColors.white,
-                        ),
+                      child: ParentalControlLoading(
+                        primaryColor: AppColors.primary,
+                        type: LoadingType.family,
+                        message: "Memuat data..",
                       ),
                     )
                     : const Text(

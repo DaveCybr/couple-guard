@@ -11,6 +11,7 @@ use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 use App\Models\Location;
 use App\Models\FamilyMember;
+use Illuminate\Support\Facades\Log;
 
 class LocationUpdated implements ShouldBroadcast
 {
@@ -26,10 +27,13 @@ class LocationUpdated implements ShouldBroadcast
         // Get family ID for broadcasting
         $familyMember = FamilyMember::where('user_id', $location->user_id)->first();
         $this->familyId = $familyMember ? $familyMember->family_id : null;
+
+        Log::info("LocationUpdated Event: familyId={$this->familyId}, userId={$location->user_id}");
     }
 
     public function broadcastOn(): array
     {
+        Log::info("Broadcasting to channel: private-family.{$this->familyId}");
         return [
             new PrivateChannel('family.' . $this->familyId),
         ];
@@ -39,11 +43,16 @@ class LocationUpdated implements ShouldBroadcast
     {
         return [
             'child_id' => $this->location->user_id,
-            'latitude' => $this->location->latitude,
-            'longitude' => $this->location->longitude,
-            'accuracy' => $this->location->accuracy,
-            'battery_level' => $this->location->battery_level,
+            'latitude' => (float) $this->location->latitude,
+            'longitude' => (float) $this->location->longitude,
+            'accuracy' => (float) $this->location->accuracy,
+            'battery_level' => (int) $this->location->battery_level,
             'timestamp' => $this->location->timestamp->toISOString(),
         ];
+    }
+
+    public function broadcastAs(): string
+    {
+        return 'location.updated';
     }
 }

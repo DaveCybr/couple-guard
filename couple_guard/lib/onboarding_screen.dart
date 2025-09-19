@@ -5,6 +5,7 @@ import 'core/constants/app_colors.dart';
 import 'core/constants/app_constants.dart';
 import 'core/constants/app_strings.dart';
 import 'core/routes/app_routes.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({Key? key}) : super(key: key);
@@ -84,28 +85,19 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     _navigateToLogin();
   }
 
-  void _navigateToLogin() {
-    // FIXED: Gunakan Future.delayed untuk menghindari navigation lock
-    Future.delayed(Duration.zero, () {
-      if (mounted && Navigator.of(context).canPop() == false) {
-        try {
-          Navigator.of(context).pushNamedAndRemoveUntil(
-            AppRoutes.login, // '/auth/login'
-            (route) => false,
-          );
-        } catch (e) {
-          debugPrint('Navigation error: $e');
-          // Fallback dengan delay lebih lama
-          Future.delayed(const Duration(milliseconds: 100), () {
-            if (mounted) {
-              Navigator.of(
-                context,
-              ).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
-            }
-          });
-        }
-      }
-    });
+  Future<void> _navigateToLogin() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(
+      'hasOnboarded',
+      true,
+    ); // ✅ simpan flag onboarding selesai
+
+    // langsung ke login
+    if (mounted) {
+      Navigator.of(
+        context,
+      ).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
+    }
   }
 
   @override

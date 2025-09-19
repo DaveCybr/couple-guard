@@ -2,7 +2,7 @@ name: couple_guard
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
 # The following defines the version and build number for your application.
 # A version number is three numbers separated by dots, like 1.2.43
@@ -47,6 +47,19 @@ dependencies:
   sign_in_with_apple: ^7.0.1
   cloud_firestore: ^6.0.0
   firebase_storage: ^13.0.0
+  shared_preferences: ^2.5.3
+  firebase_app_check: ^0.4.0
+  google_maps_flutter: ^2.12.3
+  flutter_map: ^8.2.1
+  latlong2: ^0.9.1
+  barcode_widget: ^2.0.4
+  web_socket_channel: ^3.0.3
+  pusher_channels_flutter: ^2.4.0
+  camera: ^0.11.2
+  path: ^1.9.1
+  path_provider: ^2.1.5
+  video_player: ^2.10.0
+  chewie: ^1.12.1
 
 dev_dependencies:
   flutter_test:
@@ -64,7 +77,6 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
-
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.

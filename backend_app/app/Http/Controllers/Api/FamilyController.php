@@ -82,22 +82,58 @@ class FamilyController extends Controller
     {
         $user = $request->user();
 
-        $familyMember = FamilyMember::where('user_id', $user->id)->first();
-
-        if (!$familyMember) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Not part of any family'
-            ], 404);
-        }
-
-        $members = FamilyMember::with('user')
-            ->where('family_id', $familyMember->family_id)
+        // Ambil semua family yang dibuat oleh user login
+        $families = Family::with(['creator', 'members.user'])
+            ->where('created_by', $user->id)
+            ->orderBy('created_at', 'desc') // 🔹 terbaru di atas
             ->get();
 
         return response()->json([
             'success' => true,
-            'members' => $members
+            'families' => $families
+        ]);
+    }
+
+    public function membersjoin(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        // 🔹 Ambil semua family_id di mana user login sebagai parent
+        $familyIds = FamilyMember::where('user_id', $user->id)
+            ->where('role', 'parent')
+            ->pluck('family_id');
+
+        if ($familyIds->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'User is not a parent in any family'
+            ], 404);
+        }
+
+        // 🔹 Ambil hanya families yang punya child
+        $families = Family::with([
+            'creator',
+            'members' => function ($q) {
+                $q->where('role', 'child')->with('user'); // hanya child
+            }
+        ])
+            ->whereIn('id', $familyIds)
+            ->whereHas('members', function ($q) {
+                $q->where('role', 'child'); // pastikan ada child
+            })
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        if ($families->isEmpty()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No families with children found for this parent'
+            ], 404);
+        }
+
+        return response()->json([
+            'success' => true,
+            'families' => $families
         ]);
     }
 }

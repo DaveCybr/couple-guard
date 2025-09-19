@@ -124,7 +124,7 @@ return [
     ],
 
     'broadcasting' => [
-        'default' => env('BROADCAST_CONNECTION', 'log'),
+        'default' => env('BROADCAST_CONNECTION', env('BROADCAST_CONNECTION')),
 
         'connections' => [
             'pusher' => [

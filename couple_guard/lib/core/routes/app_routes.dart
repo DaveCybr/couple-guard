@@ -12,6 +12,8 @@ class AppRoutes {
   static const String profile = '/profile';
   static const String settings = '/settings';
 
+  static const String family = '/family';
+
   // Location Routes
   static const String location = '/location';
   static const String locationHistory = '/location/history';

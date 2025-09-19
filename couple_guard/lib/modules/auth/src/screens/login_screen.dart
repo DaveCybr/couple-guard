@@ -7,7 +7,6 @@ import '../providers/auth_provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/constants/app_constants.dart';
-// import 'package:firebase_auth/firebase_auth.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -82,17 +81,17 @@ class _LoginScreenState extends State<LoginScreen>
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-    try {
-      await authProvider.login(
-        _emailController.text.trim(),
-        _passwordController.text,
-      );
+    final success = await authProvider.login(
+      _emailController.text.trim(),
+      _passwordController.text,
+    );
 
-      if (mounted && authProvider.isAuthenticated) {
-        AppNavigator.pushReplacement(AppRoutes.dashboard);
-      }
-    } catch (e) {
-      _showErrorSnackBar(e.toString());
+    if (!mounted) return;
+
+    if (success) {
+      AppNavigator.pushReplacement(AppRoutes.dashboard);
+    } else {
+      _showErrorSnackBar("Login failed, please check your credentials.");
     }
   }
 
@@ -128,14 +127,6 @@ class _LoginScreenState extends State<LoginScreen>
               // Login Form
               FadeTransition(opacity: _fadeAnimation, child: _buildLoginForm()),
 
-              const SizedBox(height: 32),
-
-              // Social Login Options
-              FadeTransition(
-                opacity: _fadeAnimation,
-                child: _buildSocialLogin(),
-              ),
-
               const SizedBox(height: 24),
 
               // Register Link
@@ -168,7 +159,7 @@ class _LoginScreenState extends State<LoginScreen>
               ),
             ],
           ),
-          child: const Icon(Icons.favorite, size: 40, color: AppColors.white),
+          child: const Icon(Icons.lock_open, size: 40, color: AppColors.white),
         ),
 
         const SizedBox(height: 24),
@@ -247,22 +238,11 @@ class _LoginScreenState extends State<LoginScreen>
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
-          borderSide: const BorderSide(color: AppColors.border),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
-          borderSide: const BorderSide(color: AppColors.primary, width: 2),
-        ),
       ),
       validator: (value) {
         if (value == null || value.isEmpty) {
           return AppStrings.fieldRequired;
         }
-        // if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}).hasMatch(value)) {
-        //   return AppStrings.invalidEmail;
-        // }
         return null;
       },
     );
@@ -289,14 +269,6 @@ class _LoginScreenState extends State<LoginScreen>
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
-          borderSide: const BorderSide(color: AppColors.border),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
-          borderSide: const BorderSide(color: AppColors.primary, width: 2),
-        ),
       ),
       validator: (value) {
         if (value == null || value.isEmpty) {
@@ -313,31 +285,20 @@ class _LoginScreenState extends State<LoginScreen>
   Widget _buildRememberMeRow() {
     return Row(
       children: [
-        // Remember Me Checkbox
-        Row(
-          children: [
-            Checkbox(
-              value: _rememberMe,
-              onChanged: (value) {
-                setState(() {
-                  _rememberMe = value ?? false;
-                });
-              },
-              activeColor: AppColors.primary,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(4),
-              ),
-            ),
-            const Text(
-              'Remember me',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
-            ),
-          ],
+        Checkbox(
+          value: _rememberMe,
+          onChanged: (value) {
+            setState(() {
+              _rememberMe = value ?? false;
+            });
+          },
+          activeColor: AppColors.primary,
         ),
-
+        const Text(
+          'Remember me',
+          style: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+        ),
         const Spacer(),
-
-        // Forgot Password Link
         TextButton(
           onPressed: () {
             Navigator.of(context).pushNamed('/auth/forgot-password');
@@ -395,91 +356,6 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  Widget _buildSocialLogin() {
-    return Column(
-      children: [
-        // Divider with "or"
-        Row(
-          children: [
-            const Expanded(child: Divider(color: AppColors.border)),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Text(
-                'or continue with',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: AppColors.textTertiary),
-              ),
-            ),
-            const Expanded(child: Divider(color: AppColors.border)),
-          ],
-        ),
-
-        const SizedBox(height: 24),
-
-        // Social Login Buttons
-        Row(
-          children: [
-            // Google Login
-            Expanded(
-              child: _buildSocialButton(
-                icon: Icons.g_mobiledata,
-                label: 'Google',
-                onPressed: () {
-                  // TODO: Implement Google login
-                },
-              ),
-            ),
-
-            const SizedBox(width: 16),
-
-            // Apple Login
-            Expanded(
-              child: _buildSocialButton(
-                icon: Icons.apple,
-                label: 'Apple',
-                onPressed: () {
-                  // TODO: Implement Apple login
-                },
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSocialButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onPressed,
-  }) {
-    return OutlinedButton(
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        side: const BorderSide(color: AppColors.border),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, color: AppColors.textSecondary),
-          const SizedBox(width: 8),
-          Text(
-            label,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildRegisterLink() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
@@ -495,9 +371,6 @@ class _LoginScreenState extends State<LoginScreen>
           onPressed: () {
             Navigator.of(context).pushNamed('/auth/register');
           },
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          ),
           child: const Text(
             AppStrings.signUp,
             style: TextStyle(

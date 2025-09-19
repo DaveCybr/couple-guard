@@ -12,7 +12,20 @@
           "package_name": "com.coupleguard.app.couple_guard"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1061613432588-q0s8rou7olb01jj9qigpdj5s4sj2hrk1.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.coupleguard.app.couple_guard",
+            "certificate_hash": "2e536d9a11da67d8e949142af7aaec293308dac6"
+          }
+        },
+        {
+          "client_id": "1061613432588-rauqe324aj6qk2j3avdk0ipq89d4foe8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyARR0po6Alww9P0HkE6Pux71MIQJbQw3nA"
@@ -20,7 +33,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1061613432588-rauqe324aj6qk2j3avdk0ipq89d4foe8.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1061613432588-luhm9aqth11teibdkejgqi9tcfrhtatg.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.coupleGuard"
+              }
+            }
+          ]
         }
       }
     }
