@@ -33,14 +33,7 @@ void main() async {
 Future<void> initializeBackgroundService() async {
   final service = FlutterBackgroundService();
 
-  // ✅ FIXED: Proper notification channel configuration
-  const AndroidNotificationChannel channel = AndroidNotificationChannel(
-    'parental_control_service', // id
-    'Safety Monitor Service', // title
-    description: 'Background service for safety monitoring',
-    importance: Importance.low, // importance must be at low or higher level
-  );
-
+  // ✅ SIMPLIFIED: Remove custom notification channel - let plugin handle it
   await service.configure(
     iosConfiguration: IosConfiguration(
       autoStart: true,
@@ -52,24 +45,21 @@ Future<void> initializeBackgroundService() async {
       autoStart: true,
       isForegroundMode: true,
       autoStartOnBoot: true,
-      notificationChannelId: 'parental_control_service',
+      // ✅ Use default notification channel
+      notificationChannelId: 'my_foreground',
       initialNotificationTitle: 'Safety Monitor',
-      initialNotificationContent: 'Keeping you safe in background',
+      initialNotificationContent: 'Monitoring in background',
       foregroundServiceNotificationId: 888,
-      // ✅ IMPORTANT: Specify exact foreground service types
-      foregroundServiceTypes: [
-        AndroidForegroundType.location,
-        AndroidForegroundType.dataSync,
-      ],
+      // ✅ Specify only supported foreground service types
+      foregroundServiceTypes: [AndroidForegroundType.location],
     ),
   );
 }
 
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) async {
-  // ✅ Create proper notification for foreground service
+  // ✅ Simplified service initialization
   if (service is AndroidServiceInstance) {
-    // Set as foreground immediately with proper notification
     service.setAsForegroundService();
 
     service.on('setAsForeground').listen((event) {
@@ -85,30 +75,16 @@ void onStart(ServiceInstance service) async {
     service.stopSelf();
   });
 
-  // Initialize background services with error handling
-  try {
-    print("Background service starting...");
-
-    // Simple initialization without complex services first
-    Timer.periodic(const Duration(minutes: 1), (timer) async {
-      try {
-        print("Background service heartbeat: ${DateTime.now()}");
-
-        // Update notification to show service is working
-        if (service is AndroidServiceInstance) {
-          service.setForegroundNotificationInfo(
-            title: "Safety Monitor Active",
-            content:
-                "Last check: ${DateTime.now().toString().substring(11, 16)}",
-          );
-        }
-      } catch (e) {
-        print('Heartbeat error: $e');
-      }
-    });
-  } catch (e) {
-    print('Background service initialization failed: $e');
-  }
+  // ✅ Basic heartbeat without complex initialization
+  Timer.periodic(const Duration(minutes: 2), (timer) async {
+    if (service is AndroidServiceInstance) {
+      service.setForegroundNotificationInfo(
+        title: "Safety Monitor Active",
+        content: "Last check: ${DateTime.now().toString().substring(11, 16)}",
+      );
+    }
+    print("Background service running: ${DateTime.now()}");
+  });
 }
 
 @pragma('vm:entry-point')
@@ -154,23 +130,6 @@ class ParentalControlChildApp extends StatelessWidget {
     );
   }
 }
-
-// ✅ Added missing imports and classes
-class AndroidNotificationChannel {
-  final String id;
-  final String title;
-  final String? description;
-  final Importance importance;
-
-  const AndroidNotificationChannel(
-    this.id,
-    this.title, {
-    this.description,
-    required this.importance,
-  });
-}
-
-enum Importance { low, high }
 
 class DeviceUtils {
   static Future<void> enableStealthMode() async {

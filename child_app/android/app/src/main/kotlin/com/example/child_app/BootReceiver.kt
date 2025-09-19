@@ -19,12 +19,10 @@ class BootReceiver : BroadcastReceiver() {
     
     private fun startMonitoringServices(context: Context) {
         try {
-            // Start location service
-            val locationIntent = Intent(context, LocationService::class.java)
-            locationIntent.action = "START_TRACKING"
-            context.startForegroundService(locationIntent)
+            // ✅ REMOVED: Don't start LocationService manually
+            // Let FlutterBackgroundService handle everything
             
-            // Start notification listener service
+            // Start notification listener service only
             val notificationIntent = Intent(context, MyNotificationListenerService::class.java)
             notificationIntent.action = "START_LISTENING"
             context.startService(notificationIntent)
