@@ -20,7 +20,7 @@ class AlbumCameraScreen extends StatefulWidget {
 }
 
 class _AlbumCameraScreenState extends State<AlbumCameraScreen> {
-  final String _baseUrl = "http://192.168.100.39:8000";
+  final String _baseUrl = "https://parentalcontrol.satelliteorbit.cloud";
   final AlbumCameraService _albumService = AlbumCameraService();
   bool _isLoading = true;
   List<dynamic> _captures = [];
