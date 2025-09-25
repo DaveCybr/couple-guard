@@ -14,6 +14,8 @@ import '../models/notification_model.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import './realtime_location.dart';
+import 'package:latlong2/latlong.dart';
+import './geofence_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -561,19 +563,89 @@ class _DashboardScreenState extends State<DashboardScreen>
                   _buildEmptyMapWidget(),
                 const SizedBox(height: 12),
 
+                // Update bagian tombol di dashboard_screen.dart Anda
                 Row(
                   children: [
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: () {},
-                        child: const Text("Geofence"),
+                        onPressed: () async {
+                          // Navigasi ke halaman geofence
+                          if (_authToken != null && selectedChild != null) {
+                            // Ambil lokasi anak saat ini untuk dijadikan default
+                            LatLng? currentLocation;
+
+                            // Jika ada realtime map widget yang sedang aktif,
+                            // bisa ambil lokasi dari situ
+                            // Atau bisa fetch dari location service
+
+                            final result = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder:
+                                    (context) => GeofenceScreen(
+                                      familyId: selectedChild!,
+                                      authToken: _authToken!,
+                                      initialLocation:
+                                          currentLocation, // Bisa null, akan pakai default
+                                    ),
+                              ),
+                            );
+
+                            // Jika berhasil menyimpan geofence, bisa refresh data atau show message
+                            if (result == true) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Geofence berhasil ditambahkan!',
+                                  ),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  'Silakan login dan pilih anak terlebih dahulu',
+                                ),
+                                backgroundColor: Colors.orange,
+                              ),
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text(
+                          "Geofence",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: ElevatedButton(
-                        onPressed: () {},
-                        child: const Text("Pembaruan"),
+                        onPressed: () {
+                          // Handler untuk tombol Pembaruan
+                          // Mungkin untuk refresh lokasi atau update data
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey[600],
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text(
+                          "Pembaruan",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
                       ),
                     ),
                   ],

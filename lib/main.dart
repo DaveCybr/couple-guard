@@ -12,6 +12,7 @@ import 'modules/auth/src/services/auth_service.dart';
 import 'modules/auth/src/storages/secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // import 'package:firebase_app_check/firebase_app_check.dart';
+import 'core/routes/app_routes.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -127,18 +128,28 @@ class _SplashScreenState extends State<SplashScreen>
   Future<void> _navigateToNextScreen() async {
     if (!mounted) return;
 
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-
     final prefs = await SharedPreferences.getInstance();
     final hasOnboarded = prefs.getBool('hasOnboarded') ?? false;
 
-    if (!hasOnboarded) {
-      AppNavigator.pushReplacement('/onboarding');
-    } else if (!authProvider.isAuthenticated) {
-      AppNavigator.pushReplacement('/auth/login');
-    } else {
-      AppNavigator.pushReplacement('/dashboard');
-    }
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    Future.delayed(Duration.zero, () {
+      if (!mounted) return;
+
+      if (!hasOnboarded) {
+        // belum onboarding
+        Navigator.of(context).pushReplacementNamed(AppRoutes.onboarding);
+      } else {
+        // sudah onboarding, cek login
+        if (authProvider.isAuthenticated && authProvider.token != null) {
+          // langsung ke dashboard
+          Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
+        } else {
+          // kalau tidak ada token → ke login
+          Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+        }
+      }
+    });
   }
 
   @override

@@ -1,6 +1,7 @@
 // lib/core/config/api_config.dart
 class ApiConfig {
-  static const String baseUrl = 'https://parentalcontrol.satelliteorbit.cloud/api';
+  static const String baseUrl =
+      'https://parentalcontrol.satelliteorbit.cloud/api';
   static const String wsUrl = 'wss://api.coupleguard.app/ws';
   static const int connectionTimeout = 30;
   static const int receiveTimeout = 30;
@@ -13,7 +14,7 @@ class ApiConfig {
 
   // Partner endpoints
   static const String partnerInvite = '/partners/invite';
-  static const String partnerAccept = '/partners/accept'; 
+  static const String partnerAccept = '/partners/accept';
   static const String partnerConsent = '/consent/request';
 
   // Location endpoints

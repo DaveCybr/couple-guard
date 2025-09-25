@@ -7,6 +7,7 @@ import 'dart:io';
 import '../services/camera_service.dart';
 import '../../../../core/constants/app_colors.dart';
 import './loading_screen.dart';
+import 'package:path/path.dart' as path;
 
 enum CaptureMode { photo, video }
 
@@ -71,6 +72,15 @@ class _CameraScreenState extends State<CameraScreen>
       DeviceOrientation.landscapeRight,
     ]);
     super.dispose();
+  }
+
+  Future<File> _prepareVideoFile(File file) async {
+    final dir = path.dirname(file.path);
+    final newPath = path.join(
+      dir,
+      "${DateTime.now().millisecondsSinceEpoch}.mp4",
+    );
+    return await file.copy(newPath);
   }
 
   @override
@@ -342,7 +352,7 @@ class _CameraScreenState extends State<CameraScreen>
 
         final File file = File(video.path);
 
-        // tampilkan loading
+        final File uploadFile = await _prepareVideoFile(file);
         showDialog(
           context: context,
           barrierDismissible: false,
@@ -351,12 +361,15 @@ class _CameraScreenState extends State<CameraScreen>
                 child: ParentalControlLoading(
                   primaryColor: AppColors.primary,
                   type: LoadingType.family,
-                  message: "Loading..",
                 ),
               ),
         );
 
-        final result = await _cameraService.uploadVideo(file, childId, token);
+        final result = await _cameraService.uploadVideo(
+          uploadFile,
+          childId,
+          token,
+        );
 
         // tutup loading
         if (mounted) Navigator.of(context).pop();

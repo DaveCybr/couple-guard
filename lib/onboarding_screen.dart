@@ -93,11 +93,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     ); // ✅ simpan flag onboarding selesai
 
     // langsung ke login
-    if (mounted) {
-      Navigator.of(
-        context,
-      ).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
-    }
+    Navigator.of(context).pushReplacementNamed(AppRoutes.login);
   }
 
   @override
