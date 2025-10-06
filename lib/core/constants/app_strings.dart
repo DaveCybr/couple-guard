@@ -1,6 +1,6 @@
 class AppStrings {
   // General
-  static const String appName = 'CoupleGuard';
+  static const String appName = 'Parental Control';
   static const String loading = 'Loading...';
   static const String error = 'Error';
   static const String success = 'Success';

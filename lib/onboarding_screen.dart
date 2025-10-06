@@ -1,6 +1,4 @@
-// lib/core/screens/onboarding_screen.dart
 import 'package:flutter/material.dart';
-// FIXED: Import paths yang benar
 import 'core/constants/app_colors.dart';
 import 'core/constants/app_constants.dart';
 import 'core/constants/app_strings.dart';
@@ -17,7 +15,6 @@ class OnboardingScreen extends StatefulWidget {
 class _OnboardingScreenState extends State<OnboardingScreen> {
   final PageController _pageController = PageController();
   int _currentPage = 0;
-
   late List<OnboardingData> _pages;
 
   @override
@@ -29,25 +26,25 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   void _initializePages() {
     _pages = [
       OnboardingData(
-        title: 'Stay Connected',
+        title: 'Selalu Terhubung',
         subtitle:
-            'Keep track of your partner\'s location and ensure their safety wherever they go.',
+            'Pantau lokasi anak dan pastikan mereka selalu dalam jangkauan aman ke mana pun mereka pergi.',
         icon: Icons.location_on,
         color: AppColors.primary,
         backgroundPattern: const _LocationPattern(),
       ),
       OnboardingData(
-        title: 'Smart Monitoring',
+        title: 'Pemantauan Cerdas',
         subtitle:
-            'Monitor device activity, app usage, and receive instant notifications when needed.',
+            'Lihat aktivitas perangkat, penggunaan aplikasi, dan dapatkan notifikasi instan saat dibutuhkan.',
         icon: Icons.visibility,
         color: AppColors.secondary,
         backgroundPattern: const _MonitoringPattern(),
       ),
       OnboardingData(
-        title: 'Secure & Private',
+        title: 'Aman & Terlindungi',
         subtitle:
-            'Your data is encrypted and secure. Only you and your partner have access to shared information.',
+            'Data keluarga dienkripsi dan aman. Hanya orang tua yang memiliki akses ke informasi anak.',
         icon: Icons.shield,
         color: AppColors.success,
         backgroundPattern: const _SecurityPattern(),
@@ -68,7 +65,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         curve: Curves.easeInOut,
       );
     } else {
-      _navigateToLogin();
+      _completeOnboarding();
     }
   }
 
@@ -81,19 +78,26 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     }
   }
 
-  void _skipOnboarding() {
-    _navigateToLogin();
+  Future<void> _completeOnboarding() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('hasOnboarded', true);
+
+      print('✅ Onboarding completed - hasOnboarded set to true');
+
+      if (!mounted) return;
+
+      Navigator.of(context).pushReplacementNamed(AppRoutes.register);
+    } catch (e) {
+      print('❌ Error completing onboarding: $e');
+      // Fallback navigation
+      if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed(AppRoutes.register);
+    }
   }
 
-  Future<void> _navigateToLogin() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(
-      'hasOnboarded',
-      true,
-    ); // ✅ simpan flag onboarding selesai
-
-    // langsung ke login
-    Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+  void _skipOnboarding() {
+    _completeOnboarding();
   }
 
   @override
@@ -103,22 +107,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Header with skip button
             _buildHeader(),
-
-            // Page indicator
             _buildPageIndicator(),
-
-            // PageView
             Expanded(
               child: PageView.builder(
                 controller: _pageController,
                 onPageChanged: (index) {
-                  if (mounted) {
-                    setState(() {
-                      _currentPage = index;
-                    });
-                  }
+                  setState(() {
+                    _currentPage = index;
+                  });
                 },
                 itemCount: _pages.length,
                 itemBuilder: (context, index) {
@@ -126,8 +123,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 },
               ),
             ),
-
-            // Bottom navigation
             _buildBottomNavigation(),
           ],
         ),
@@ -141,7 +136,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Logo
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -153,7 +147,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(
-                  Icons.favorite,
+                  Icons.family_restroom,
                   color: AppColors.white,
                   size: 18,
                 ),
@@ -168,11 +162,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
             ],
           ),
-          // Skip button
           TextButton(
             onPressed: _skipOnboarding,
             child: const Text(
-              'Skip',
+              'Lewati',
               style: TextStyle(
                 color: AppColors.textSecondary,
                 fontWeight: FontWeight.w500,
@@ -199,10 +192,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             width: _currentPage == index ? 24 : 8,
             height: 8,
             decoration: BoxDecoration(
-              color:
-                  _currentPage == index
-                      ? _pages[_currentPage].color
-                      : AppColors.grey300,
+              color: _currentPage == index
+                  ? _pages[_currentPage].color
+                  : AppColors.grey300,
               borderRadius: BorderRadius.circular(4),
             ),
           ),
@@ -216,7 +208,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       padding: const EdgeInsets.all(AppConstants.defaultPadding),
       child: Column(
         children: [
-          // Illustration area
           Expanded(
             flex: 3,
             child: Container(
@@ -228,9 +219,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  // Background pattern
                   Positioned.fill(child: data.backgroundPattern),
-                  // Main icon
                   Container(
                     width: 120,
                     height: 120,
@@ -251,10 +240,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
             ),
           ),
-
           const SizedBox(height: AppConstants.largePadding),
-
-          // Content area
           Expanded(
             flex: 2,
             child: Column(
@@ -292,7 +278,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       padding: const EdgeInsets.all(AppConstants.defaultPadding),
       child: Row(
         children: [
-          // Back button
           if (_currentPage > 0) ...[
             Expanded(
               child: OutlinedButton(
@@ -307,7 +292,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                 ),
                 child: const Text(
-                  'Back',
+                  'Kembali',
                   style: TextStyle(
                     color: AppColors.textPrimary,
                     fontWeight: FontWeight.w500,
@@ -317,8 +302,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             ),
             const SizedBox(width: AppConstants.defaultPadding),
           ],
-
-          // Next/Get Started button
           Expanded(
             flex: _currentPage == 0 ? 1 : 1,
             child: ElevatedButton(
@@ -339,7 +322,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    _currentPage == _pages.length - 1 ? 'Get Started' : 'Next',
+                    _currentPage == _pages.length - 1
+                        ? 'Mulai Sekarang'
+                        : 'Berikutnya',
                     style: const TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 16,
@@ -357,6 +342,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 }
 
+// ... (OnboardingData dan background patterns tetap sama)
 class OnboardingData {
   final String title;
   final String subtitle;
@@ -373,7 +359,6 @@ class OnboardingData {
   });
 }
 
-// Background patterns for each page
 class _LocationPattern extends StatelessWidget {
   const _LocationPattern();
 

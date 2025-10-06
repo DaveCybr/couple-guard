@@ -1,32 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/constants/app_colors.dart';
 import 'core/constants/app_constants.dart';
 import 'core/constants/app_strings.dart';
 import 'core/routes/app_navigator.dart';
 import 'core/routes/route_generator.dart';
+import 'core/routes/app_routes.dart';
 import 'modules/auth/src/providers/auth_provider.dart';
 import 'modules/auth/src/services/auth_service.dart';
 import 'modules/auth/src/storages/secure_storage.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-// import 'package:firebase_app_check/firebase_app_check.dart';
-import 'core/routes/app_routes.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
 
-  // Initialize Firebase
-  await Firebase.initializeApp();
-  // await FirebaseAppCheck.instance.activate(
-  //   androidProvider: AndroidProvider.debug,
-  //   appleProvider: AppleProvider.debug,
-  // );
-
-  // await NotificationService.initialize();
-
-  runApp(const CoupleGuardApp());
+  //aktifkan jika ingin menghapus semua data shared preferences
+  //await prefs.clear();
+  runApp(CoupleGuardApp());
 }
 
 class CoupleGuardApp extends StatelessWidget {
@@ -39,12 +32,9 @@ class CoupleGuardApp extends StatelessWidget {
         ChangeNotifierProvider(
           create: (_) => AuthProvider(AuthService(), SecureStorage()),
         ),
-        // Add more providers here
       ],
       child: MaterialApp(
-        title: 'CoupleGuard',
-        // theme: AppTheme.lightTheme,
-        // darkTheme: AppTheme.darkTheme,
+        title: 'Parental Control',
         navigatorKey: AppNavigator.navigatorKey,
         onGenerateRoute: RouteGenerator.generateRoute,
         initialRoute: '/',
@@ -109,47 +99,56 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _startSplashSequence() async {
-    // Start logo animation
-    _logoController.forward();
+    try {
+      // Start animations
+      _logoController.forward();
+      await Future.delayed(const Duration(milliseconds: 200));
+      _textController.forward();
+      await Future.delayed(const Duration(milliseconds: 300));
+      _loadingController.repeat();
 
-    // Start text animation after 200ms
-    await Future.delayed(const Duration(milliseconds: 200));
-    _textController.forward();
-
-    // Start loading animation after 500ms
-    await Future.delayed(const Duration(milliseconds: 300));
-    _loadingController.repeat();
-
-    // Initialize auth and navigate after 3 seconds total
-    await Future.delayed(const Duration(milliseconds: 2000));
-    _navigateToNextScreen();
+      // Check onboarding status and navigate
+      await _checkOnboardingStatus();
+    } catch (e) {
+      print('❌ Error in splash sequence: $e');
+      _navigateToFallback();
+    }
   }
 
-  Future<void> _navigateToNextScreen() async {
-    if (!mounted) return;
+  Future<void> _checkOnboardingStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final hasOnboarded = prefs.getBool('hasOnboarded') ?? false;
+      final hasSeenFamilyCode = prefs.getBool('hasSeenFamilyCode') ?? false;
 
-    final prefs = await SharedPreferences.getInstance();
-    final hasOnboarded = prefs.getBool('hasOnboarded') ?? false;
+      print('📢 SplashScreen - hasOnboarded: $hasOnboarded');
+      print('📢 SplashScreen - hasSeenFamilyCode: $hasSeenFamilyCode');
 
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      // Tunggu minimal 2 detik total untuk splash screen
+      await Future.delayed(const Duration(seconds: 2));
 
-    Future.delayed(Duration.zero, () {
       if (!mounted) return;
 
+      // Navigasi berdasarkan status
       if (!hasOnboarded) {
-        // belum onboarding
+        print('➡️ Navigate to onboarding');
         Navigator.of(context).pushReplacementNamed(AppRoutes.onboarding);
+      } else if (!hasSeenFamilyCode) {
+        print('➡️ Navigate to register');
+        Navigator.of(context).pushReplacementNamed(AppRoutes.register);
       } else {
-        // sudah onboarding, cek login
-        if (authProvider.isAuthenticated && authProvider.token != null) {
-          // langsung ke dashboard
-          Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
-        } else {
-          // kalau tidak ada token → ke login
-          Navigator.of(context).pushReplacementNamed(AppRoutes.login);
-        }
+        print('➡️ Navigate to family code');
+        Navigator.of(context).pushReplacementNamed(AppRoutes.familyCode);
       }
-    });
+    } catch (e) {
+      print('❌ Error checking onboarding status: $e');
+      _navigateToFallback();
+    }
+  }
+
+  void _navigateToFallback() {
+    if (!mounted) return;
+    Navigator.of(context).pushReplacementNamed(AppRoutes.onboarding);
   }
 
   @override
@@ -164,18 +163,20 @@ class _SplashScreenState extends State<SplashScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF6C63FF), Color(0xFF4CAF50)],
+          ),
+        ),
         child: Stack(
           children: [
-            // Background decorative elements
             _buildBackgroundDecorations(),
-
-            // Main content
             Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Logo with animation
                   AnimatedBuilder(
                     animation: _logoScale,
                     builder: (context, child) {
@@ -201,9 +202,9 @@ class _SplashScreenState extends State<SplashScreen>
                             alignment: Alignment.center,
                             children: [
                               const Icon(
-                                Icons.favorite,
+                                Icons.family_restroom,
                                 size: 60,
-                                color: AppColors.error,
+                                color: AppColors.primary,
                               ),
                               Positioned(
                                 top: 8,
@@ -228,10 +229,7 @@ class _SplashScreenState extends State<SplashScreen>
                       );
                     },
                   ),
-
                   const SizedBox(height: 32),
-
-                  // App name with animation
                   AnimatedBuilder(
                     animation: _textOpacity,
                     builder: (context, child) {
@@ -241,33 +239,28 @@ class _SplashScreenState extends State<SplashScreen>
                           children: [
                             Text(
                               AppStrings.appName,
-                              style: Theme.of(
-                                context,
-                              ).textTheme.headlineLarge?.copyWith(
-                                color: AppColors.white,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1.2,
-                              ),
+                              style: Theme.of(context).textTheme.headlineLarge
+                                  ?.copyWith(
+                                    color: AppColors.white,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 1.2,
+                                  ),
                             ),
                             const SizedBox(height: 8),
                             Text(
                               AppConstants.appDescription,
-                              style: Theme.of(
-                                context,
-                              ).textTheme.bodyLarge?.copyWith(
-                                color: AppColors.white.withOpacity(0.8),
-                                fontWeight: FontWeight.w300,
-                              ),
+                              style: Theme.of(context).textTheme.bodyLarge
+                                  ?.copyWith(
+                                    color: AppColors.white.withOpacity(0.8),
+                                    fontWeight: FontWeight.w300,
+                                  ),
                             ),
                           ],
                         ),
                       );
                     },
                   ),
-
                   const SizedBox(height: 60),
-
-                  // Loading animation
                   AnimatedBuilder(
                     animation: _loadingRotation,
                     builder: (context, child) {
@@ -289,8 +282,6 @@ class _SplashScreenState extends State<SplashScreen>
                 ],
               ),
             ),
-
-            // Version info at bottom
             Positioned(
               bottom: 40,
               left: 0,

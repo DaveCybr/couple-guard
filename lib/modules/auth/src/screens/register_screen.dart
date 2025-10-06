@@ -1,13 +1,11 @@
-// lib/modules/auth/src/screens/register_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../../../core/routes/app_navigator.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // Tambahkan ini
 import '../../../../core/routes/app_routes.dart';
 import '../providers/auth_provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/constants/app_constants.dart';
-import './loading_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({Key? key}) : super(key: key);
@@ -19,13 +17,9 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen>
     with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  final _phoneController = TextEditingController();
-
-  String? _selectedRole; // parent atau child
   bool _isPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
 
@@ -39,6 +33,20 @@ class _RegisterScreenState extends State<RegisterScreen>
     super.initState();
     _initAnimations();
     _startAnimations();
+    _checkIfAlreadyRegistered(); // Tambahkan pengecekan
+  }
+
+  // Tambahkan method untuk cek status
+  Future<void> _checkIfAlreadyRegistered() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hasSeenFamilyCode = prefs.getBool('hasSeenFamilyCode') ?? false;
+
+    print('🔍 RegisterScreen - hasSeenFamilyCode: $hasSeenFamilyCode');
+
+    if (hasSeenFamilyCode && mounted) {
+      print('➡️ User sudah registered, redirect ke family code');
+      Navigator.of(context).pushReplacementNamed(AppRoutes.familyCode);
+    }
   }
 
   void _initAnimations() {
@@ -52,12 +60,10 @@ class _RegisterScreenState extends State<RegisterScreen>
       vsync: this,
     );
 
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.3),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic),
-    );
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
+          CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic),
+        );
 
     _fadeAnimation = Tween<double>(
       begin: 0.0,
@@ -74,7 +80,6 @@ class _RegisterScreenState extends State<RegisterScreen>
 
   @override
   void dispose() {
-    _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -86,38 +91,29 @@ class _RegisterScreenState extends State<RegisterScreen>
   Future<void> _handleRegister() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (_selectedRole == null) {
-      _showErrorSnackBar("Please select a role");
-      return;
-    }
-
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
     try {
       final success = await authProvider.register(
-        _nameController.text.trim(),
         _emailController.text.trim(),
         _passwordController.text,
-        _selectedRole!,
-        phone:
-            _phoneController.text.trim().isEmpty
-                ? null
-                : _phoneController.text.trim(),
       );
 
       if (!mounted) return;
 
       if (success) {
+        // ✅ Setelah register berhasil, SIMPAN STATUS dan ke family code
+        await _markFamilyCodeAsSeen();
+
         Navigator.of(
           context,
-        ).pushNamedAndRemoveUntil(AppRoutes.dashboard, (route) => false);
+        ).pushNamedAndRemoveUntil(AppRoutes.familyCode, (route) => false);
       } else {
         _showErrorSnackBar("Registration failed, please try again.");
       }
     } catch (e) {
       if (!mounted) return;
 
-      // Parse error message dari backend
       String errorMessage = "Registration failed";
 
       if (e.toString().contains('email has already been taken')) {
@@ -125,7 +121,6 @@ class _RegisterScreenState extends State<RegisterScreen>
       } else if (e.toString().contains('validation')) {
         errorMessage = "Data tidak valid, periksa kembali input Anda";
       } else {
-        // Tampilkan error asli untuk debugging
         errorMessage = e.toString().replaceAll(
           'Exception: Register gagal: ',
           '',
@@ -133,9 +128,18 @@ class _RegisterScreenState extends State<RegisterScreen>
       }
 
       _showErrorSnackBar(errorMessage);
-
-      // Untuk debugging - hapus ini di production
       print('Full error: $e');
+    }
+  }
+
+  // Tambahkan method untuk menyimpan status
+  Future<void> _markFamilyCodeAsSeen() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('hasSeenFamilyCode', true);
+      print('✅ RegisterScreen - hasSeenFamilyCode diset true');
+    } catch (e) {
+      print('❌ Error saving hasSeenFamilyCode: $e');
     }
   }
 
@@ -144,7 +148,7 @@ class _RegisterScreenState extends State<RegisterScreen>
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: AppColors.error, // pakai warna kamu
+        backgroundColor: AppColors.error,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
@@ -175,10 +179,10 @@ class _RegisterScreenState extends State<RegisterScreen>
                 child: _buildRegisterForm(),
               ),
 
-              const SizedBox(height: 24),
+              // const SizedBox(height: 24),
 
-              // Login Link
-              FadeTransition(opacity: _fadeAnimation, child: _buildLoginLink()),
+              // // Login Link
+              // FadeTransition(opacity: _fadeAnimation, child: _buildLoginLink()),
             ],
           ),
         ),
@@ -249,13 +253,7 @@ class _RegisterScreenState extends State<RegisterScreen>
         key: _formKey,
         child: Column(
           children: [
-            _buildNameField(),
-            const SizedBox(height: AppConstants.defaultPadding),
             _buildEmailField(),
-            const SizedBox(height: AppConstants.defaultPadding),
-            _buildPhoneField(), // ✅ tambahan phone
-            const SizedBox(height: AppConstants.defaultPadding),
-            _buildRoleDropdown(), // ✅ tambahan role
             const SizedBox(height: AppConstants.defaultPadding),
             _buildPasswordField(),
             const SizedBox(height: AppConstants.defaultPadding),
@@ -265,25 +263,6 @@ class _RegisterScreenState extends State<RegisterScreen>
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildNameField() {
-    return TextFormField(
-      controller: _nameController,
-      decoration: InputDecoration(
-        labelText: 'Full Name',
-        prefixIcon: const Icon(Icons.person_outline),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
-        ),
-      ),
-      validator: (value) {
-        if (value == null || value.isEmpty) {
-          return AppStrings.fieldRequired;
-        }
-        return null;
-      },
     );
   }
 
@@ -373,48 +352,6 @@ class _RegisterScreenState extends State<RegisterScreen>
     );
   }
 
-  Widget _buildPhoneField() {
-    return TextFormField(
-      controller: _phoneController,
-      keyboardType: TextInputType.phone,
-      decoration: InputDecoration(
-        labelText: 'Phone (optional)',
-        prefixIcon: const Icon(Icons.phone_outlined),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRoleDropdown() {
-    return DropdownButtonFormField<String>(
-      value: _selectedRole,
-      items: const [
-        DropdownMenuItem(value: "parent", child: Text("Parent")),
-        DropdownMenuItem(value: "child", child: Text("Child")),
-      ],
-      onChanged: (value) {
-        setState(() {
-          _selectedRole = value;
-        });
-      },
-      decoration: InputDecoration(
-        labelText: "Role",
-        prefixIcon: const Icon(Icons.group_outlined),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
-        ),
-      ),
-      validator: (value) {
-        if (value == null) {
-          return "Please select a role";
-        }
-        return null;
-      },
-    );
-  }
-
   Widget _buildRegisterButton() {
     return Consumer<AuthProvider>(
       builder: (context, authProvider, child) {
@@ -431,24 +368,21 @@ class _RegisterScreenState extends State<RegisterScreen>
               ),
               elevation: 2,
             ),
-            child:
-                authProvider.isLoading
-                    ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: ParentalControlLoading(
-                        primaryColor: AppColors.primary,
-                        type: LoadingType.family,
-                        message: "Memuat data..",
-                      ),
-                    )
-                    : const Text(
-                      'Sign Up',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+            child: authProvider.isLoading
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        AppColors.white,
                       ),
                     ),
+                  )
+                : const Text(
+                    'Sign Up',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
           ),
         );
       },
@@ -468,7 +402,7 @@ class _RegisterScreenState extends State<RegisterScreen>
         const SizedBox(width: 4),
         TextButton(
           onPressed: () {
-            Navigator.of(context).pushNamed('/auth/login');
+            Navigator.of(context).pushNamed(AppRoutes.login);
           },
           child: const Text(
             'Login',

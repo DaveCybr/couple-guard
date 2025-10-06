@@ -1,8 +1,9 @@
 class AppConstants {
   // App Info
-  static const String appName = 'CoupleGuard';
+  static const String appName = 'Parental Control';
   static const String appVersion = '1.0.0';
-  static const String appDescription = 'Keeping couples safe and connected';
+  static const String appDescription =
+      'Keluarga aman, terkendali, dan terhubung.';
 
   // API Configuration
   static const String baseUrl = 'https://api.coupleguard.com';

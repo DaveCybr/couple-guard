@@ -1,275 +1,360 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:couple_guard/modules/auth/src/models/family_model.dart';
-import '../services/family_service.dart';
-import '../../../../core/constants/app_colors.dart';
+import 'package:flutter/services.dart';
 import 'package:barcode_widget/barcode_widget.dart';
-import './loading_screen.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:pusher_channels_flutter/pusher_channels_flutter.dart';
+import '../providers/auth_provider.dart';
+import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_constants.dart';
+import '../../../../core/routes/app_routes.dart';
+import '../../src/services/pair_service.dart';
 
-class FamilyScreen extends StatefulWidget {
-  final String authToken;
-
-  const FamilyScreen({Key? key, required this.authToken}) : super(key: key);
+class FamilyCodeScreen extends StatefulWidget {
+  const FamilyCodeScreen({Key? key}) : super(key: key);
 
   @override
-  State<FamilyScreen> createState() => _FamilyScreenState();
+  State<FamilyCodeScreen> createState() => _FamilyCodeScreenState();
 }
 
-class _FamilyScreenState extends State<FamilyScreen> {
-  final FamilyService _familyService = FamilyService();
-  final TextEditingController _familyNameController = TextEditingController();
+class _FamilyCodeScreenState extends State<FamilyCodeScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
 
-  bool _isLoading = false;
+  bool _isDevicePaired = false;
+  String? _pairedDeviceName;
+  bool _isLoading = true;
 
-  // Data dummy untuk sementara
-  // Gunakan Family, bukan FamilyModel
-  List<GetFamily> _families = [];
-  GetFamily fromFamily(Family family) {
-    return GetFamily(
-      id: family.id,
-      name: family.name,
-      familyCode: family.familyCode,
-    );
-  }
-
-  // Buat kode acak 8 karakter
+  String? _familyCode; // ✅ Simpan kode keluarga di sini
 
   @override
   void initState() {
     super.initState();
-    _loadFamilies(); // load data saat pertama kali buka
+    _initAnimations();
+    _markFamilyCodeAsSeen();
+
+    // ✅ Ambil familyCode setelah widget dibangun
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      _familyCode = authProvider.user?.familyCode;
+      _initializePusher(); // Pindahkan ke sini agar _familyCode sudah tersedia
+    });
+  }
+
+  Future<void> _markFamilyCodeAsSeen() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('hasSeenFamilyCode', true);
+      print('✅ FamilyCodeScreen - hasSeenFamilyCode diset true');
+    } catch (e) {
+      print('❌ Error saving hasSeenFamilyCode: $e');
+    }
+  }
+
+  Future<void> _initializePusher() async {
+    try {
+      await PusherService.initialize();
+      await Future.delayed(const Duration(seconds: 1));
+
+      if (_familyCode != null && _familyCode!.isNotEmpty) {
+        print('🚀 Subscribing to Pusher channel for family: $_familyCode');
+
+        await PusherService.subscribeToFamilyChannel(
+          _familyCode!,
+          _handleDevicePaired,
+        );
+      } else {
+        print('❌ Family code is null or empty');
+      }
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('❌ Error initializing Pusher: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _handleDevicePaired(PusherEvent event) {
+    print('🎯 Device paired event received: ${event.data}');
+
+    try {
+      final Map<String, dynamic> data = json.decode(event.data!);
+      final deviceName = data['device_name'] ?? 'Unknown Device';
+
+      if (mounted) {
+        setState(() {
+          _isDevicePaired = true;
+          _pairedDeviceName = deviceName;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$deviceName berhasil terhubung!'),
+            backgroundColor: AppColors.success,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+
+        Future.delayed(const Duration(seconds: 2), () {
+          if (mounted) {
+            print('➡️ Navigating to dashboard after pairing');
+            Navigator.of(
+              context,
+            ).pushNamedAndRemoveUntil(AppRoutes.dashboard, (route) => false);
+          }
+        });
+      }
+    } catch (e) {
+      print('❌ Error handling device paired event: $e');
+    }
+  }
+
+  void _initAnimations() {
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeIn),
+    );
+
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
+          CurvedAnimation(
+            parent: _animationController,
+            curve: Curves.easeOutCubic,
+          ),
+        );
+
+    _animationController.forward();
   }
 
   @override
   void dispose() {
-    _familyNameController.dispose();
+    // ✅ Jangan pakai Provider.of di sini
+    if (_familyCode != null) {
+      PusherService.unsubscribeFromFamilyChannel(_familyCode!);
+      print('🧹 Unsubscribed from Pusher channel: $_familyCode');
+    }
+
+    _animationController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadFamilies() async {
-    setState(() => _isLoading = true);
-    try {
-      final families = await _familyService.getFamilies(
-        authToken: widget.authToken,
-      );
-      setState(() {
-        _families = families;
-      });
-    } catch (e) {
-      debugPrint("❌ Error saat load families: $e");
-      _showSnackBar("Gagal memuat data keluarga", isError: true);
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
-
-  void _showAddFamilyDialog() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            return AlertDialog(
-              title: Text(
-                'Tambah Keluarga Baru',
-                style: TextStyle(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: _familyNameController,
-                    decoration: InputDecoration(
-                      labelText: 'Nama Keluarga',
-                      labelStyle: TextStyle(color: AppColors.primary),
-                      border: OutlineInputBorder(
-                        borderSide: BorderSide(color: AppColors.primary),
-                      ),
-                      focusedBorder: OutlineInputBorder(
-                        borderSide: BorderSide(
-                          color: AppColors.primary,
-                          width: 2,
-                        ),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderSide: BorderSide(
-                          color: AppColors.primary.withOpacity(0.5),
-                        ),
-                      ),
-                    ),
-                    cursorColor: AppColors.primary,
-                  ),
-                  if (_isLoading) ...[
-                    ParentalControlLoading(
-                      primaryColor: AppColors.primary,
-                      type: LoadingType.family,
-                      message: "Proses..",
-                    ),
-                  ],
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed:
-                      _isLoading
-                          ? null
-                          : () {
-                            Navigator.of(context).pop();
-                            _familyNameController.clear();
-                          },
-                  child: Text(
-                    'Batal',
-                    style: TextStyle(color: Colors.grey[600]),
-                  ),
-                ),
-                ElevatedButton(
-                  onPressed:
-                      _isLoading ? null : () => _createFamily(setDialogState),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: Text(_isLoading ? 'Memproses...' : 'Tambah'),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Future<void> _createFamily(StateSetter setDialogState) async {
-    if (_familyNameController.text.trim().isEmpty) {
-      _showSnackBar('Nama keluarga tidak boleh kosong', isError: true);
-      return;
-    }
-
-    setDialogState(() {
-      _isLoading = true;
-    });
-
-    try {
-      final newFamilyResponse = await _familyService.createFamily(
-        familyName: _familyNameController.text.trim(),
-        authToken: widget.authToken,
-      );
-
-      setState(() {
-        _families.insert(0, fromFamily(newFamilyResponse.family));
-      });
-
-      Navigator.of(context).pop();
-      _familyNameController.clear();
-      _showSnackBar('Keluarga berhasil ditambahkan!');
-    } catch (e) {
-      String errorMessage = 'Gagal menambahkan keluarga';
-
-      if (e is FamilyException) {
-        errorMessage = e.getUserFriendlyMessage();
-      }
-
-      _showSnackBar(errorMessage, isError: true);
-    } finally {
-      setDialogState(() {
-        _isLoading = false;
-      });
-    }
-  }
-
-  void _showSnackBar(String message, {bool isError = false}) {
+  void _copyToClipboard(BuildContext context, String text) {
+    Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.red[600] : AppColors.primary,
-        duration: Duration(seconds: 3),
+        content: const Text('Kode berhasil disalin'),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: AppColors.success,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
+        ),
       ),
     );
-  }
-
-  String _formatDate(DateTime? date) {
-    if (date == null) return '-';
-    return '${date.day}/${date.month}/${date.year}';
   }
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = Provider.of<AuthProvider>(context);
+    final familyCode =
+        _familyCode ?? authProvider.user?.familyCode ?? 'LOADING...';
+
     return Scaffold(
-      backgroundColor: Colors.grey[50],
-      appBar: AppBar(
-        title: Text(
-          'Daftar Keluarga',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: AppColors.primary,
-        elevation: 0,
-        centerTitle: true,
-      ),
-      body:
-          _isLoading
-              ? _buildLoadingState() // 🔹 tampilkan loading dulu
-              : _families.isEmpty
-              ? _buildEmptyState()
-              : _buildFamilyList(),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddFamilyDialog,
-        backgroundColor: AppColors.primary,
-        child: Icon(Icons.add, color: Colors.white),
-        tooltip: 'Tambah Keluarga',
-      ),
-    );
-  }
-
-  Widget _buildLoadingState() {
-    return Center(
-      child: ParentalControlLoading(
-        primaryColor: AppColors.primary,
-        type: LoadingType.family,
-        message: "Memuat data..",
-      ),
-    );
-  }
-
-  Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.family_restroom,
-            size: 80,
-            color: AppColors.primary.withOpacity(0.3),
-          ),
-          SizedBox(height: 16),
-          Text(
-            'Belum Ada Keluarga',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: AppColors.primary,
-            ),
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Tambahkan keluarga pertama Anda!',
-            style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-          ),
-          SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: _showAddFamilyDialog,
-            icon: Icon(Icons.add, color: Colors.white),
-            label: Text(
-              'Tambah Keluarga',
-              style: TextStyle(color: Colors.white),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: SlideTransition(
+            position: _slideAnimation,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(AppConstants.defaultPadding),
+              child: Column(
+                children: [
+                  const SizedBox(height: 40),
+                  _buildHeader(),
+                  const SizedBox(height: 40),
+                  if (_isLoading)
+                    _buildLoadingIndicator()
+                  else
+                    Column(
+                      children: [
+                        _buildFamilyCodeCard(familyCode),
+                        const SizedBox(height: 24),
+                        _buildInfoBox(),
+                        if (_isDevicePaired) _buildPairingSuccess(),
+                      ],
+                    ),
+                ],
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader() {
+    return Column(
+      children: [
+        Container(
+          width: 100,
+          height: 100,
+          decoration: BoxDecoration(
+            gradient: AppColors.primaryGradient,
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withOpacity(0.3),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: const Icon(
+            Icons.family_restroom,
+            size: 50,
+            color: AppColors.white,
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'Selamat Datang!',
+          style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: AppColors.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Ini adalah kode keluarga Anda',
+          style: Theme.of(
+            context,
+          ).textTheme.bodyLarge?.copyWith(color: AppColors.textSecondary),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLoadingIndicator() {
+    return Container(
+      padding: const EdgeInsets.all(40),
+      child: Column(
+        children: [
+          CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            'Menyiapkan koneksi real-time...',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFamilyCodeCard(String familyCode) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadow,
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Text(
+            'Kode Keluarga',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Bagikan kode ini untuk mengundang anggota keluarga',
+            textAlign: TextAlign.center,
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 24),
+          if (familyCode != 'LOADING...')
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: BarcodeWidget(
+                barcode: Barcode.qrCode(),
+                data: familyCode,
+                width: 250,
+                height: 250,
+                drawText: false,
+                backgroundColor: AppColors.background,
+              ),
+            ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  familyCode,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 3,
+                    color: AppColors.primary,
+                    fontFamily: 'monospace',
+                  ),
+                ),
+                const SizedBox(width: 12),
+                InkWell(
+                  onTap: () => _copyToClipboard(context, familyCode),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.copy,
+                      size: 20,
+                      color: AppColors.white,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -277,150 +362,94 @@ class _FamilyScreenState extends State<FamilyScreen> {
     );
   }
 
-  Widget _buildFamilyList() {
-    return RefreshIndicator(
-      color: AppColors.primary,
-      onRefresh: () async {
-        // Simulate refresh - dalam implementasi nyata, reload data dari API
-        await Future.delayed(Duration(seconds: 1));
-      },
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(height: 16),
-            Expanded(
-              child: ListView.builder(
-                itemCount: _families.length,
-                itemBuilder: (context, index) {
-                  final family = _families[index];
-                  return Card(
-                    margin: EdgeInsets.only(bottom: 12),
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      side: BorderSide(
-                        color: AppColors.primary.withOpacity(0.1),
-                        width: 1,
-                      ),
-                    ),
-                    child: ListTile(
-                      contentPadding: EdgeInsets.all(16),
-                      leading: CircleAvatar(
-                        backgroundColor: AppColors.primary.withOpacity(0.1),
-                        radius: 25,
-                        child: Icon(
-                          Icons.family_restroom,
-                          color: AppColors.primary,
-                          size: 28,
-                        ),
-                      ),
-                      title: Text(
-                        family.name,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: AppColors.primary,
-                        ),
-                      ),
-
-                      trailing: IconButton(
-                        icon: Icon(Icons.qr_code, color: AppColors.primary),
-                        onPressed: () {
-                          showDialog(
-                            context: context,
-                            builder: (context) {
-                              return Dialog(
-                                insetPadding: EdgeInsets.symmetric(
-                                  horizontal: 24,
-                                  vertical: 24,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Stack(
-                                  children: [
-                                    Container(
-                                      decoration: BoxDecoration(
-                                        color:
-                                            AppColors.primary, // 🔹 base color
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      padding: EdgeInsets.all(20),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          // 🔹 Family name di luar background putih
-                                          Text(
-                                            family.name,
-                                            style: TextStyle(
-                                              fontSize: 18,
-                                              fontWeight: FontWeight.bold,
-                                              color: Colors.white,
-                                            ),
-                                            textAlign: TextAlign.center,
-                                          ),
-                                          SizedBox(height: 16),
-
-                                          // 🔹 Box putih untuk barcode
-                                          Container(
-                                            decoration: BoxDecoration(
-                                              color: Colors.white,
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                            ),
-                                            padding: EdgeInsets.all(20),
-                                            child: BarcodeWidget(
-                                              barcode: Barcode.qrCode(),
-                                              data: family.familyCode,
-                                              width: 200,
-                                              height: 200,
-                                              drawText: false,
-                                              backgroundColor: Colors.white,
-                                            ),
-                                          ),
-                                          SizedBox(height: 16),
-
-                                          // 🔹 Tulisan instruksi di luar box putih
-                                          Text(
-                                            'Scan barcode ini untuk menghubungkan perangkat',
-                                            style: TextStyle(
-                                              fontSize: 14,
-                                              color: Colors.white,
-                                            ),
-                                            textAlign: TextAlign.center,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-
-                                    // 🔹 Tombol close di pojok kanan atas
-                                    Positioned(
-                                      top: 8,
-                                      right: 8,
-                                      child: IconButton(
-                                        icon: Icon(
-                                          Icons.close,
-                                          color: Colors.white,
-                                        ),
-                                        onPressed: () => Navigator.pop(context),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
+  Widget _buildInfoBox() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.secondary.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppColors.secondary.withOpacity(0.3),
+          width: 1,
         ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.info_outline, size: 24, color: AppColors.secondary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Menunggu Pairing',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Aplikasi sedang menunggu device lain melakukan pairing. '
+                  'Scan QR code atau masukkan kode di device lain untuk melanjutkan.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.textSecondary,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPairingSuccess() {
+    return Container(
+      margin: const EdgeInsets.only(top: 20),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.success.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.success),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.check_circle, color: AppColors.success),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Pairing Berhasil!',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.success,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (_pairedDeviceName != null)
+                  Text(
+                    'Device "$_pairedDeviceName" berhasil terhubung',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                Text(
+                  'Mengarahkan ke dashboard...',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(AppColors.success),
+            strokeWidth: 2,
+          ),
+        ],
       ),
     );
   }

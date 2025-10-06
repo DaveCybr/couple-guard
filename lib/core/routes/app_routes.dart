@@ -7,6 +7,9 @@ class AppRoutes {
   static const String forgotPassword = '/auth/forgot-password';
   static const String resetPassword = '/auth/reset-password';
 
+  // Family Code Screen (New)
+  static const String familyCode = '/family-code';
+
   // Main Routes
   static const String dashboard = '/dashboard';
   static const String profile = '/profile';

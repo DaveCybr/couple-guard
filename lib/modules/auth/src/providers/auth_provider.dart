@@ -26,7 +26,6 @@ class AuthProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isAuthenticated =>
       _status == AuthStatus.authenticated && _user != null;
-  bool get isEmailVerified => _user?.isEmailVerified ?? false;
 
   /// 🔹 Cek apakah user sudah login sebelumnya (token ada di storage)
   Future<void> _initializeAuth() async {
@@ -79,25 +78,16 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  Future<bool> register(
-    String name,
-    String email,
-    String password,
-    String role, {
-    String? phone,
-  }) async {
+  Future<bool> register(String email, String password) async {
     _setLoading(true);
     try {
       final user = await _authService.register(
-        name: name,
         email: email,
         password: password,
-        role: role,
-        phone: phone,
       );
 
       _user = user;
-      _token = user.token; // 🔹 ambil token dari UserModel
+      _token = user.token;
 
       if (_token != null) {
         await _secureStorage.saveToken(_token!);

@@ -4,35 +4,25 @@ import 'package:couple_guard/modules/auth/src/models/notification_model.dart';
 import 'package:couple_guard/core/configs/api_config.dart';
 
 class NotificationService {
-  final String _baseUrl = ApiConfig.baseUrl; // ganti sesuai URL backend
+  final String _baseUrl = ApiConfig.baseUrl;
 
   Future<Map<String, dynamic>> fetchNotifications({
     required String authToken,
-    required int childId,
-    int page = 1,
-    int limit = 50,
-    String? search,
-    String? category,
-    int? priority,
-    String? appPackage,
-    bool? onlyFlagged,
+    required String deviceId, // Ganti dari childId, ubah ke String
     String? startDate,
     String? endDate,
+    String? appName, // Ganti dari appPackage
+    int limit = 100,
   }) async {
     final queryParams = {
-      'page': page.toString(),
       'limit': limit.toString(),
-      if (search != null) 'search': search,
-      if (category != null) 'category': category,
-      if (priority != null) 'priority': priority.toString(),
-      if (appPackage != null) 'app_package': appPackage,
-      if (onlyFlagged != null) 'only_flagged': onlyFlagged.toString(),
       if (startDate != null) 'start_date': startDate,
       if (endDate != null) 'end_date': endDate,
+      if (appName != null) 'app_name': appName,
     };
 
     final uri = Uri.parse(
-      '$_baseUrl/notification/list/$childId',
+      '$_baseUrl/api/notifications/$deviceId',
     ).replace(queryParameters: queryParams);
 
     final response = await http.get(
@@ -46,16 +36,11 @@ class NotificationService {
     if (response.statusCode == 200) {
       final jsonResponse = json.decode(response.body);
       if (jsonResponse['success'] == true) {
-        final notifications =
-            (jsonResponse['data'] as List)
-                .map((n) => NotificationModel.fromJson(n))
-                .toList();
+        final notifications = (jsonResponse['data'] as List)
+            .map((n) => NotificationModel.fromJson(n))
+            .toList();
 
-        return {
-          'notifications': notifications,
-          'pagination': jsonResponse['pagination'],
-          'summary': jsonResponse['summary'],
-        };
+        return {'notifications': notifications, 'success': true};
       } else {
         throw Exception(
           jsonResponse['message'] ?? 'Failed to fetch notifications',

@@ -10,6 +10,7 @@ import '../../../../core/routes/app_routes.dart';
 import 'dart:ui' as ui;
 import '../services/family_service.dart';
 import '../services/notification_service.dart';
+import '../services/auth_service.dart';
 import '../models/notification_model.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -130,21 +131,16 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
                               child: CircleAvatar(
                                 radius: 22,
                                 backgroundImage: NetworkImage(
-                                  'https://ui-avatars.com/api/?name=${Uri.encodeComponent(auth.user?.name ?? "User")}&background=random&color=fff&size=128',
+                                  'https://ui-avatars.com/api/?name=&background=random&color=fff&size=128',
                                 ),
-                                onBackgroundImageError: (
-                                  exception,
-                                  stackTrace,
-                                ) {
-                                  // Handle error jika gagal load image
-                                },
-                                child:
-                                    auth.user?.name == null
-                                        ? const Icon(
-                                          Icons.person,
-                                          color: Colors.grey,
-                                        )
-                                        : null,
+                                onBackgroundImageError:
+                                    (exception, stackTrace) {
+                                      // Handle error jika gagal load image
+                                    },
+                                child: const Icon(
+                                  Icons.person,
+                                  color: Colors.grey,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 16),
@@ -154,7 +150,7 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
-                                    auth.user?.name ?? "User Name",
+                                    "Parent",
                                     style: const TextStyle(
                                       fontSize: 14,
                                       fontWeight: FontWeight.w500,
@@ -209,15 +205,14 @@ class BottomNavBackgroundPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final bgPaint =
-        Paint()
-          ..color = Colors.white
-          ..style = PaintingStyle.fill;
+    final bgPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
 
-    final shadowPaint =
-        Paint()
-          ..color = Colors.black.withOpacity(0.25) // warna shadow
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+    final shadowPaint = Paint()
+      ..color = Colors.black
+          .withOpacity(0.25) // warna shadow
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
 
     final path = ui.Path();
 
@@ -283,8 +278,12 @@ class _DashboardScreenState extends State<DashboardScreen>
   bool _isLoadingNotifications = false;
   Map<String, dynamic>? _pagination;
   Map<String, dynamic>? _summary;
-
+  List<DeviceModel> _devices = [];
+  bool _isLoadingDevices = false;
+  int? _selectedDeviceId;
   final NotificationService _notificationService = NotificationService();
+  final AuthService _authService = AuthService();
+
   Future<String?> fetchAppIcon(String packageName) async {
     final apiKey =
         "c8c3e9d70793274cd329b8523d5bad7383c8b1c7b0b65250d8cb1b41e3d0c686";
@@ -325,7 +324,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     return null;
   }
 
-  Future<void> _loadNotifications(int childId) async {
+  Future<void> _loadNotifications(String deviceId) async {
     if (_authToken == null) {
       debugPrint("❌ Tidak ada auth token, skip load notifications");
       return;
@@ -337,20 +336,17 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     try {
       final result = await _notificationService.fetchNotifications(
-        authToken: _authToken!, // pakai token dari AuthProvider
-        childId: childId,
-        page: 1,
+        authToken: _authToken!,
+        deviceId: deviceId, // Sekarang menggunakan device_id dari API devices
         limit: 50,
       );
 
       setState(() {
         _notifications = result['notifications'] as List<NotificationModel>;
-        _pagination = result['pagination'];
-        _summary = result['summary'];
       });
 
       debugPrint(
-        "✅ Berhasil load ${_notifications.length} notifikasi untuk child $childId",
+        "✅ Berhasil load ${_notifications.length} notifikasi untuk device $deviceId",
       );
     } catch (e) {
       debugPrint("❌ Error load notifications: $e");
@@ -358,6 +354,46 @@ class _DashboardScreenState extends State<DashboardScreen>
       setState(() {
         _isLoadingNotifications = false;
       });
+    }
+  }
+
+  Future<void> _loadDevices() async {
+    if (_authToken == null) {
+      debugPrint("❌ Token null, tidak bisa load devices");
+      return;
+    }
+
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final user = authProvider.user;
+
+    if (user?.id == null) {
+      debugPrint("❌ User ID null, tidak bisa load devices");
+      return;
+    }
+
+    setState(() => _isLoadingDevices = true);
+
+    try {
+      final devices = await _authService.getDevicesByParent(
+        parentId: user!.id!, // Ambil dari auth.user.id
+        token: _authToken!, // Gunakan _authtoken
+      );
+
+      setState(() {
+        _devices = devices;
+        // Auto-select device pertama jika ada
+        if (devices.isNotEmpty && _selectedDeviceId == null) {
+          _selectedDeviceId = devices.first.id;
+          // Load notifications untuk device yang dipilih
+          _loadNotifications(_selectedDeviceId!.toString());
+        }
+      });
+
+      debugPrint("✅ Berhasil load ${devices.length} devices");
+    } catch (e) {
+      debugPrint("❌ Error load devices: $e");
+    } finally {
+      setState(() => _isLoadingDevices = false);
     }
   }
 
@@ -370,6 +406,7 @@ class _DashboardScreenState extends State<DashboardScreen>
         _authToken = authProvider.token;
       });
       _loadFamilies(); // panggil setelah token ada
+      _loadDevices();
     }
   }
 
@@ -381,12 +418,13 @@ class _DashboardScreenState extends State<DashboardScreen>
       duration: const Duration(milliseconds: 300),
     );
 
-    _curveAnimation = Tween<double>(
-      begin: _selectedIndex.toDouble(),
-      end: _selectedIndex.toDouble(),
-    ).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
-    );
+    _curveAnimation =
+        Tween<double>(
+          begin: _selectedIndex.toDouble(),
+          end: _selectedIndex.toDouble(),
+        ).animate(
+          CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+        );
   }
 
   Future<void> _loadFamilies() async {
@@ -418,34 +456,29 @@ class _DashboardScreenState extends State<DashboardScreen>
       _selectedIndex = newIndex;
     });
 
-    _curveAnimation = Tween<double>(
-      begin: oldIndex.toDouble(),
-      end: newIndex.toDouble(),
-    ).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
-    );
+    _curveAnimation =
+        Tween<double>(
+          begin: oldIndex.toDouble(),
+          end: newIndex.toDouble(),
+        ).animate(
+          CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
+        );
 
     _animationController.forward(from: 0);
   }
 
-  final List<Map<String, dynamic>> children = [
-    {
-      'name': 'Sarah',
-      'age': 12,
-      'avatar': '👧',
-      'status': 'online',
-      'location': 'Sekolah',
-      'battery': 85,
-    },
-    {
-      'name': 'Alex',
-      'age': 8,
-      'avatar': '👦',
-      'status': 'offline',
-      'location': 'Rumah',
-      'battery': 45,
-    },
-  ];
+  void _refreshLocationData() {
+    // Tambahkan logic refresh data lokasi di sini
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Memperbarui data lokasi...'),
+        backgroundColor: Colors.blue,
+      ),
+    );
+
+    // Contoh: Panggil method refresh di map widget jika ada
+    // _mapController?.refresh();
+  }
 
   Widget _buildHomePage() {
     return SingleChildScrollView(
@@ -453,388 +486,554 @@ class _DashboardScreenState extends State<DashboardScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Child Selector
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Pilih Family',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E3A8A),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                if (_isLoading)
-                  const Center(
-                    child: ParentalControlLoading(
-                      primaryColor: AppColors.primary,
-                      type: LoadingType.family,
-                      message: "Memuat data..",
-                    ),
-                  )
-                else if (_families.isEmpty)
-                  const Text("Tidak ada family")
-                else if (_families.length <= 3)
-                  // tampilkan langsung tanpa scrollbar & tanpa padding kanan
-                  Column(
-                    children:
-                        _families
-                            .map((family) => _buildFamilyCard(family))
-                            .toList(),
-                  )
-                else
-                  SizedBox(
-                    height: 200, // cukup untuk ±3 item
-                    child: Scrollbar(
-                      thumbVisibility: true, // selalu tampil
-                      radius: const Radius.circular(8),
-                      child: ListView.builder(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        shrinkWrap: true,
-                        padding: const EdgeInsets.only(
-                          right: 8, // kasih jarak biar gak nabrak scrollbar
-                        ),
-                        itemCount: _families.length,
-                        itemBuilder: (context, index) {
-                          final family = _families[index];
-                          return _buildFamilyCard(family);
-                        },
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
           // Card Lokasi dengan Map
+          // Card Lokasi - Updated styling
           Container(
-            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(bottom: 16),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Colors.blue[50]!, Colors.white],
+              ),
+              borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
+                  color: Colors.blue.withOpacity(0.15),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                  spreadRadius: 0,
                 ),
               ],
+              border: Border.all(color: Colors.blue.withOpacity(0.1), width: 1),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Lokasi',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E3A8A),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header dengan gradient
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.blue[400]!, Colors.blue[600]!],
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.location_on_rounded,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Lokasi',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
 
-                // Map view pakai flutter_map
-                if (_authToken != null && selectedChild != null)
-                  RealtimeMapWidget(
-                    key: ValueKey(
-                      selectedChild,
-                    ), // reset state kalau ganti child
-                    familyId: selectedChild!,
-                    authToken: _authToken!,
-                  )
-                else
-                  _buildEmptyMapWidget(),
-                const SizedBox(height: 12),
+                  // Content
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Map view pakai flutter_map
+                        if (_authToken != null && selectedChild != null)
+                          RealtimeMapWidget(
+                            key: ValueKey(
+                              selectedChild,
+                            ), // reset state kalau ganti child
+                            familyId: selectedChild!,
+                            authToken: _authToken!,
+                          )
+                        else
+                          _buildEmptyMapWidget(),
+                        const SizedBox(height: 16),
 
-                // Update bagian tombol di dashboard_screen.dart Anda
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          // Navigasi ke halaman geofence
-                          if (_authToken != null && selectedChild != null) {
-                            // Ambil lokasi anak saat ini untuk dijadikan default
-                            LatLng? currentLocation;
-
-                            // Jika ada realtime map widget yang sedang aktif,
-                            // bisa ambil lokasi dari situ
-                            // Atau bisa fetch dari location service
-
-                            final result = await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder:
-                                    (context) => GeofenceScreen(
-                                      familyId: selectedChild!,
-                                      authToken: _authToken!,
-                                      initialLocation:
-                                          currentLocation, // Bisa null, akan pakai default
+                        // Tombol Geofence & Pembaruan
+                        // Tombol Geofence & Pembaruan - Modern version
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Material(
+                                borderRadius: BorderRadius.circular(12),
+                                elevation: 4,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        Colors.blue[500]!,
+                                        Colors.blue[600]!,
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
                                     ),
-                              ),
-                            );
-
-                            // Jika berhasil menyimpan geofence, bisa refresh data atau show message
-                            if (result == true) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    'Geofence berhasil ditambahkan!',
+                                    borderRadius: BorderRadius.circular(12),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.blue.withOpacity(0.4),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
                                   ),
-                                  backgroundColor: Colors.green,
+                                  child: InkWell(
+                                    onTap: () async {
+                                      if (_authToken != null &&
+                                          selectedChild != null) {
+                                        LatLng? currentLocation;
+                                        final result = await Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                GeofenceScreen(
+                                                  familyId: selectedChild!,
+                                                  authToken: _authToken!,
+                                                  initialLocation:
+                                                      currentLocation,
+                                                ),
+                                          ),
+                                        );
+                                        if (result == true) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            const SnackBar(
+                                              content: Text(
+                                                'Geofence berhasil ditambahkan!',
+                                              ),
+                                              backgroundColor: Colors.green,
+                                            ),
+                                          );
+                                        }
+                                      } else {
+                                        _showErrorSnackBar(
+                                          'Silakan login dan pilih anak terlebih dahulu',
+                                        );
+                                      }
+                                    },
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 14,
+                                        horizontal: 16,
+                                      ),
+                                      child: const Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.fence_rounded,
+                                            size: 20,
+                                            color: Colors.white,
+                                          ),
+                                          SizedBox(width: 8),
+                                          Text(
+                                            "Geofence",
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
                                 ),
-                              );
-                            }
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Silakan login dan pilih anak terlebih dahulu',
-                                ),
-                                backgroundColor: Colors.orange,
                               ),
-                            );
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Material(
+                                borderRadius: BorderRadius.circular(12),
+                                elevation: 4,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        Colors.grey[600]!,
+                                        Colors.grey[700]!,
+                                      ],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.grey.withOpacity(0.4),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
+                                  ),
+                                  child: InkWell(
+                                    onTap: () {
+                                      _refreshLocationData();
+                                    },
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 14,
+                                        horizontal: 16,
+                                      ),
+                                      child: const Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.refresh_rounded,
+                                            size: 20,
+                                            color: Colors.white,
+                                          ),
+                                          SizedBox(width: 8),
+                                          Text(
+                                            "Pembaruan",
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              fontSize: 16,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        child: const Text(
-                          "Geofence",
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
+                      ],
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton(
-                        onPressed: () {
-                          // Handler untuk tombol Pembaruan
-                          // Mungkin untuk refresh lokasi atau update data
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.grey[600],
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                        child: const Text(
-                          "Pembaruan",
-                          style: TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 16),
 
-          // Card Potretan
           Container(
-            padding: const EdgeInsets.all(16),
+            margin: const EdgeInsets.only(bottom: 16),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Colors.purple[50]!, Colors.white],
+              ),
+              borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
+                  color: Colors.purple.withOpacity(0.15),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                  spreadRadius: 0,
                 ),
               ],
+              border: Border.all(
+                color: Colors.purple.withOpacity(0.1),
+                width: 1,
+              ),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Potretan',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E3A8A),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header dengan gradient
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.purple[400]!, Colors.purple[600]!],
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(
+                            Icons.photo_library_rounded,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Monitoring Visual',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () {
-                          if (selectedChild != null && _authToken != null) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder:
-                                    (context) => AlbumCameraScreen(
-                                      selectedChildId:
-                                          selectedChild!, // ✅ id anak
-                                      jwtToken: _authToken!, // ✅ token
+
+                  // Content
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _buildMonitoringButton(
+                            icon: Icons.photo_camera_rounded,
+                            label: 'Album\nPotretan',
+                            color: Colors.blue,
+                            gradientColors: [
+                              Colors.blue[400]!,
+                              Colors.blue[600]!,
+                            ],
+                            onTap: () {
+                              if (selectedChild != null && _authToken != null) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => AlbumCameraScreen(
+                                      selectedChildId: selectedChild!,
+                                      jwtToken: _authToken!,
                                     ),
-                              ),
-                            );
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  "Pilih family dulu sebelum membuka kamera",
-                                ),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        },
-                        child: Column(
-                          children: const [
-                            Icon(
-                              Icons.camera_alt,
-                              color: Colors.blue,
-                              size: 36,
-                            ),
-                            SizedBox(height: 8),
-                            Text("Potretan Kamera"),
-                          ],
+                                  ),
+                                );
+                              } else {
+                                _showErrorSnackBar(
+                                  'Pilih family terlebih dahulu',
+                                );
+                              }
+                            },
+                          ),
                         ),
-                      ),
-                    ),
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () {},
-                        child: Column(
-                          children: const [
-                            Icon(
-                              Icons.phone_android,
-                              color: Colors.green,
-                              size: 36,
-                            ),
-                            SizedBox(height: 8),
-                            Text("Potretan Layar"),
-                          ],
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildMonitoringButton(
+                            icon: Icons.videocam_rounded,
+                            label: 'Kamera\nLive',
+                            color: Colors.purple,
+                            gradientColors: [
+                              Colors.purple[400]!,
+                              Colors.purple[600]!,
+                            ],
+                            onTap: () {
+                              if (selectedChild != null && _authToken != null) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => CameraScreen(
+                                      selectedChildId: selectedChild!,
+                                      jwtToken: _authToken!,
+                                    ),
+                                  ),
+                                );
+                              } else {
+                                _showErrorSnackBar(
+                                  'Pilih family terlebih dahulu',
+                                );
+                              }
+                            },
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: _buildMonitoringButton(
+                            icon: Icons.screenshot_monitor_rounded,
+                            label: 'Layar\nLive',
+                            color: Colors.orange,
+                            gradientColors: [
+                              Colors.orange[400]!,
+                              Colors.orange[600]!,
+                            ],
+                            onTap: () {
+                              if (selectedChild != null && _authToken != null) {
+                                // TODO: Navigate to live screen
+                                _showInfoSnackBar('Fitur dalam pengembangan');
+                              } else {
+                                _showErrorSnackBar(
+                                  'Pilih family terlebih dahulu',
+                                );
+                              }
+                            },
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 16),
 
-          // Card Kamera & Layar
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  blurRadius: 10,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Kamera & Layar',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF1E3A8A),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () {
-                          if (selectedChild != null && _authToken != null) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder:
-                                    (context) => CameraScreen(
-                                      selectedChildId:
-                                          selectedChild!, // ✅ id anak
-                                      jwtToken: _authToken!, // ✅ token
-                                    ),
-                              ),
-                            );
-                          } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  "Pilih family dulu sebelum membuka kamera",
-                                ),
-                                backgroundColor: Colors.red,
-                              ),
-                            );
-                          }
-                        },
-                        child: Column(
-                          children: const [
-                            Icon(
-                              Icons.videocam,
-                              color: Colors.purple,
-                              size: 36,
-                            ),
-                            SizedBox(height: 8),
-                            Text("Kamera"),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    Expanded(
-                      child: GestureDetector(
-                        onTap: () {},
-                        child: Column(
-                          children: const [
-                            Icon(
-                              Icons.desktop_windows,
-                              color: Colors.orange,
-                              size: 36,
-                            ),
-                            SizedBox(height: 8),
-                            Text("Layar"),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+          // Helper Widget untuk tombol monitoring
         ],
+      ),
+    );
+  }
+
+  Widget _buildMonitoringButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required List<Color> gradientColors,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: color.withOpacity(0.2), width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: gradientColors,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: color.withOpacity(0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                ),
+                child: Icon(icon, color: Colors.white, size: 32),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey[800],
+                  height: 1.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Helper untuk snackbar
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.error_outline_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.red[600],
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  void _showInfoSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.info_outline_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.blue[600],
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        duration: const Duration(seconds: 2),
       ),
     );
   }
@@ -894,53 +1093,190 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  Widget _buildFamilyCard(GetFamily family) {
-    final isSelected = selectedChild == family.id; // bandingkan dengan ID
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          selectedChild = family.id; // simpan id
-        });
-        _loadNotifications(family.id); // load notifications untuk child ini
-        debugPrint("👀 Sedang mengamati family ${family.id}");
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(12),
+  Widget _buildActivitiesPage() {
+    return Column(
+      children: [
+        // Device Selector
+        _buildDeviceSelector(),
+
+        // Notifications List
+        Expanded(child: _buildNotificationsList()),
+      ],
+    );
+  }
+
+  Widget _buildDeviceSelector() {
+    if (_isLoadingDevices) {
+      return Container(
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFFEBF4FF) : const Color(0xFFF8F9FA),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSelected ? const Color(0xFF3B82F6) : Colors.transparent,
-            width: 2,
-          ),
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
-        child: Row(
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.family_restroom, size: 28, color: Colors.blue),
-            const SizedBox(width: 12),
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 12),
+            Text("Memuat devices...", style: TextStyle(color: Colors.grey)),
+          ],
+        ),
+      );
+    }
+
+    if (_devices.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.orange[50],
+          border: Border.all(color: Colors.orange[100]!),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.warning_amber, color: Colors.orange, size: 20),
+            SizedBox(width: 8),
             Expanded(
               child: Text(
-                family.name,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                ),
+                "Tidak ada device terdaftar. Pastikan device sudah terhubung.",
+                style: TextStyle(color: Colors.orange, fontSize: 12),
               ),
             ),
           ],
         ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.phone_android, size: 20, color: Colors.blue),
+          const SizedBox(width: 8),
+          const Text("Device:", style: TextStyle(fontWeight: FontWeight.w500)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              decoration: BoxDecoration(
+                color: Colors.grey[50],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.grey[300]!),
+              ),
+              child: DropdownButton<int>(
+                value: _selectedDeviceId,
+                isExpanded: true,
+                underline: const SizedBox(),
+                icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
+                items: _devices.map((device) {
+                  return DropdownMenuItem<int>(
+                    value: device.id,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          device.deviceName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w500,
+                            fontSize: 14,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          device.deviceId,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey[600],
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Row(
+                          children: [
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: device.isOnline
+                                    ? Colors.green
+                                    : Colors.grey,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              device.isOnline ? 'Online' : 'Offline',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: device.isOnline
+                                    ? Colors.green
+                                    : Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+                onChanged: (int? newValue) {
+                  if (newValue != null) {
+                    setState(() {
+                      _selectedDeviceId = newValue;
+                    });
+                    // Load notifications untuk device yang baru dipilih
+                    _loadNotifications(newValue.toString());
+                  }
+                },
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Tombol refresh devices
+          IconButton(
+            icon: const Icon(Icons.refresh, size: 20),
+            onPressed: _loadDevices,
+            tooltip: "Refresh Devices",
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildActivitiesPage() {
-    // Group notifications by date (yyyy/MM/dd)
-    final Map<String, List<NotificationModel>> notificationsByDate = {};
-    for (var n in _notifications) {
-      final dateKey =
-          "${n.timestamp.year}/${n.timestamp.month.toString().padLeft(2, '0')}/${n.timestamp.day.toString().padLeft(2, '0')}";
-      notificationsByDate.putIfAbsent(dateKey, () => []).add(n);
+  Widget _buildNotificationsList() {
+    if (_selectedDeviceId == null && _devices.isNotEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.phone_android, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text(
+              "Pilih device untuk melihat notifikasi",
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+          ],
+        ),
+      );
     }
 
     if (_isLoadingNotifications) {
@@ -948,19 +1284,38 @@ class _DashboardScreenState extends State<DashboardScreen>
         child: ParentalControlLoading(
           primaryColor: AppColors.primary,
           type: LoadingType.family,
-          message: "Memuat data..",
+          message: "Memuat notifikasi...",
         ),
       );
     }
 
-    if (_notifications.isEmpty) {
-      return const Center(child: Text("Belum ada notifikasi"));
+    if (_notifications.isEmpty && _selectedDeviceId != null) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.notifications_off, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text(
+              "Belum ada notifikasi",
+              style: TextStyle(fontSize: 16, color: Colors.grey),
+            ),
+            SizedBox(height: 8),
+            Text(
+              "Notifikasi akan muncul di sini",
+              style: TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+          ],
+        ),
+      );
     }
 
-    if (selectedChild == null) {
-      return const Center(
-        child: Text("Pilih family dulu untuk melihat notifikasi"),
-      );
+    // Group notifications by date (yyyy/MM/dd)
+    final Map<String, List<NotificationModel>> notificationsByDate = {};
+    for (var n in _notifications) {
+      final dateKey =
+          "${n.timestamp.year}/${n.timestamp.month.toString().padLeft(2, '0')}/${n.timestamp.day.toString().padLeft(2, '0')}";
+      notificationsByDate.putIfAbsent(dateKey, () => []).add(n);
     }
 
     return ListView.builder(
@@ -1016,9 +1371,13 @@ class _DashboardScreenState extends State<DashboardScreen>
                   if (dateIndex == 0)
                     IconButton(
                       icon: const Icon(Icons.refresh, color: Colors.blue),
-                      tooltip: "Reload",
+                      tooltip: "Reload Notifikasi",
                       onPressed: () {
-                        _loadNotifications(selectedChild!); // fungsi refresh
+                        if (_selectedDeviceId != null) {
+                          _loadNotifications(_selectedDeviceId!.toString());
+                        } else {
+                          _showErrorSnackBar('Pilih device terlebih dahulu');
+                        }
                       },
                     ),
                 ],
@@ -1032,14 +1391,14 @@ class _DashboardScreenState extends State<DashboardScreen>
               padding: const EdgeInsets.symmetric(horizontal: 16),
               itemCount: notifications.length,
               itemBuilder: (context, index) {
-                final activity = notifications[index];
+                final notification = notifications[index];
 
-                // pilih ikon berdasarkan appPackage
+                // pilih ikon berdasarkan appName
                 Widget appIcon;
-                final pkg = activity.appPackage?.toLowerCase() ?? '';
+                final appName = notification.appName.toLowerCase();
 
                 appIcon = FutureBuilder<String?>(
-                  future: fetchAppIcon(pkg),
+                  future: fetchAppIcon(appName),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return _buildIconBox(
@@ -1084,16 +1443,20 @@ class _DashboardScreenState extends State<DashboardScreen>
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(
-                                  activity.title ?? "-",
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.black,
+                                Expanded(
+                                  child: Text(
+                                    notification.title,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.black,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                                 Text(
-                                  "${activity.timestamp.hour.toString().padLeft(2, '0')}:${activity.timestamp.minute.toString().padLeft(2, '0')}",
+                                  "${notification.timestamp.hour.toString().padLeft(2, '0')}:${notification.timestamp.minute.toString().padLeft(2, '0')}",
                                   style: const TextStyle(
                                     fontSize: 12,
                                     color: Colors.grey,
@@ -1103,7 +1466,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              activity.content ?? "",
+                              notification.content,
                               style: const TextStyle(
                                 fontSize: 14,
                                 color: Colors.black87,
@@ -1114,7 +1477,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              activity.category ?? "",
+                              notification.appName,
                               style: const TextStyle(
                                 fontSize: 12,
                                 color: Colors.grey,
@@ -1143,7 +1506,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     Gradient? gradient,
     IconData? icon,
     Color iconColor = Colors.white,
-    String? imageUrl, // tambahkan
+    String? imageUrl,
   }) {
     return Container(
       width: 40,
@@ -1153,13 +1516,12 @@ class _DashboardScreenState extends State<DashboardScreen>
         color: color,
         gradient: gradient,
       ),
-      child:
-          imageUrl != null
-              ? ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: Image.network(imageUrl, fit: BoxFit.cover),
-              )
-              : Icon(icon, color: iconColor, size: 20),
+      child: imageUrl != null
+          ? ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.network(imageUrl, fit: BoxFit.cover),
+            )
+          : Icon(icon, color: iconColor, size: 20),
     );
   }
 
@@ -1183,16 +1545,15 @@ class _DashboardScreenState extends State<DashboardScreen>
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: isActive ? AppColors.primary : Colors.transparent,
-                boxShadow:
-                    isActive
-                        ? [
-                          BoxShadow(
-                            color: AppColors.primary.withOpacity(0.4),
-                            blurRadius: 15,
-                            spreadRadius: 2,
-                          ),
-                        ]
-                        : [],
+                boxShadow: isActive
+                    ? [
+                        BoxShadow(
+                          color: AppColors.primary.withOpacity(0.4),
+                          blurRadius: 15,
+                          spreadRadius: 2,
+                        ),
+                      ]
+                    : [],
               ),
               child: Icon(
                 icon,
@@ -1223,197 +1584,407 @@ class _DashboardScreenState extends State<DashboardScreen>
       {
         'icon': Icons.family_restroom,
         'title': 'Keluarga',
-        'subtitle': 'Kelola keluarga',
+        'subtitle': 'Lihat kode keluarga Anda',
+        'color': const Color(0xFF3B82F6),
       },
     ];
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: settings.length + 1, // +1 untuk Logout
-      itemBuilder: (context, index) {
-        if (index < settings.length) {
-          final setting = settings[index];
-          return Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Colors.grey[50]!, Colors.white],
+        ),
+      ),
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // Settings Items
+          // ...settings.map(
+          //   (setting) => _buildSettingItem(
+          //     icon: setting['icon'] as IconData,
+          //     title: setting['title'] as String,
+          //     subtitle: setting['subtitle'] as String,
+          //     color: setting['color'] as Color,
+          //     onTap: () => _handleSettingTap(setting['title'] as String),
+          //   ),
+          // ),
+
+          // const SizedBox(height: 24),
+
+          // Divider dengan text
+          Row(
+            children: [
+              Expanded(child: Divider(color: Colors.grey[300], thickness: 1)),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'Akun',
+                  style: TextStyle(
+                    color: Colors.grey[500],
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+              Expanded(child: Divider(color: Colors.grey[300], thickness: 1)),
+            ],
+          ),
+
+          const SizedBox(height: 16),
+
+          // Logout Button
+          _buildLogoutButton(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingItem({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.1),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+            spreadRadius: 0,
+          ),
+        ],
+        border: Border.all(color: Colors.grey.withOpacity(0.1), width: 1),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                // Icon Container
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [color.withOpacity(0.8), color],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: color.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Icon(icon, color: Colors.white, size: 24),
+                ),
+
+                const SizedBox(width: 16),
+
+                // Text Content
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                          color: Colors.black87,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey[600],
+                          height: 1.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Arrow Icon
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.arrow_forward_ios, color: color, size: 16),
                 ),
               ],
             ),
-            child: ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: (setting['title'] == 'Kode'
-                          ? Colors.green
-                          : const Color(0xFF3B82F6))
-                      .withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  setting['icon'] as IconData,
-                  color:
-                      (setting['title'] == 'Kode'
-                          ? Colors.green
-                          : const Color(0xFF3B82F6)),
-                  size: 20,
-                ),
-              ),
-              title: Text(
-                setting['title'] as String,
-                style: TextStyle(
-                  fontWeight: FontWeight.w500,
-                  fontSize: 16,
-                  color:
-                      setting['title'] == 'Kode' ? Colors.green : Colors.black,
-                ),
-              ),
-              subtitle: Text(
-                setting['subtitle'] as String,
-                style: const TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-              trailing: const Icon(
-                Icons.arrow_forward_ios,
-                size: 16,
-                color: Colors.grey,
-              ),
-              onTap: () {
-                if (setting['title'] == 'Keluarga') {
-                  final token = _authToken;
+          ),
+        ),
+      ),
+    );
+  }
 
-                  if (token != null) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => FamilyScreen(authToken: token),
-                      ),
-                    );
-                  } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Token tidak tersedia, silakan login ulang',
-                        ),
-                      ),
-                    );
-                  }
-                } else if (setting['title'] == 'Kode') {
-                  // 🔹 tampilkan kode unik di popup
-                  showDialog(
-                    context: context,
-                    builder: (context) {
-                      // misal kode tersimpan di _user.parentCode
-                      String code = "Belum tersedia";
-
-                      return AlertDialog(
-                        title: const Text('Kode Unik'),
-                        content: Text(
-                          code,
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 2,
-                          ),
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('Tutup'),
-                          ),
-                        ],
-                      );
-                    },
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('${setting['title']} diklik')),
-                  );
-                }
-              },
+  Widget _buildLogoutButton() {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.red[400]!, Colors.red[600]!],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.red.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _handleLogout,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.logout_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'Keluar dari Akun',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
             ),
-          );
-        } else {
-          // 🔹 Logout
-          return Container(
-            margin: const EdgeInsets.only(top: 12),
-            decoration: BoxDecoration(
-              color: Colors.red.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: ListTile(
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.logout, color: Colors.red, size: 20),
-              ),
-              title: const Text(
-                'Logout',
-                style: TextStyle(
-                  fontWeight: FontWeight.w500,
-                  fontSize: 16,
-                  color: Colors.red,
-                ),
-              ),
-              onTap: () async {
-                final confirm = await showDialog<bool>(
-                  context: context,
-                  builder: (context) {
-                    return AlertDialog(
-                      title: const Text("Konfirmasi"),
-                      content: const Text("Apakah Anda yakin ingin logout?"),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.of(context).pop(false),
-                          child: const Text("Batal"),
-                        ),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                          ),
-                          onPressed: () => Navigator.of(context).pop(true),
-                          child: const Text("Logout"),
-                        ),
-                      ],
-                    );
-                  },
-                );
+          ),
+        ),
+      ),
+    );
+  }
 
-                if (confirm == true) {
-                  try {
-                    await Provider.of<AuthProvider>(
-                      context,
-                      listen: false,
-                    ).logout(); // ✅ tidak pakai argumen
+  Future<void> _handleSettingTap(String title) async {
+    if (title == 'Keluarga') {
+      // Show custom loading dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        barrierColor: Colors.black.withOpacity(0.5),
+        builder: (context) => const Center(
+          child: ParentalControlLoading(
+            primaryColor: AppColors.primary,
+            type: LoadingType.family,
+            // message: "Memuat kode keluarga..",
+          ),
+        ),
+      );
 
-                    if (context.mounted) {
-                      Navigator.of(context).pushNamedAndRemoveUntil(
-                        AppRoutes.login,
-                        (route) => false,
-                      );
-                    }
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Gagal logout: $e')),
-                      );
-                    }
-                  }
-                }
-              },
-            ),
+      try {
+        final token = _authToken;
+        if (token == null) throw Exception('Token tidak tersedia');
+
+        final user = await _authService.getCurrentUser(token);
+
+        if (context.mounted) Navigator.pop(context);
+
+        // if (user?.familyCode != null && user!.familyCode!.isNotEmpty) {
+        //   if (context.mounted) {
+        //     showDialog(
+        //       context: context,
+        //       builder: (context) => BarcodeDialog(familyCode: user.familyCode!),
+        //     );
+        //   }
+        // } else {
+        //   if (context.mounted) {
+        //     _showStyledSnackBar(
+        //       'Kode keluarga belum tersedia',
+        //       Colors.orange,
+        //       Icons.warning_amber_rounded,
+        //     );
+        //   }
+        // }
+      } catch (e) {
+        if (context.mounted) Navigator.pop(context);
+        if (context.mounted) {
+          _showStyledSnackBar(
+            'Gagal memuat kode: ${e.toString().replaceAll('Exception:', '').trim()}',
+            Colors.red,
+            Icons.error_outline_rounded,
           );
         }
+      }
+    }
+  }
+
+  Future<void> _handleLogout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.logout_rounded,
+                  color: Colors.red,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                "Konfirmasi Logout",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          content: const Text(
+            "Apakah Anda yakin ingin keluar dari akun?",
+            style: TextStyle(fontSize: 15, height: 1.5),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: Text(
+                "Batal",
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text(
+                "Ya, Keluar",
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        );
       },
+    );
+
+    if (confirm == true) {
+      try {
+        await Provider.of<AuthProvider>(context, listen: false).logout();
+
+        if (context.mounted) {
+          Navigator.of(
+            context,
+          ).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
+        }
+      } catch (e) {
+        if (context.mounted) {
+          _showStyledSnackBar(
+            'Gagal logout: $e',
+            Colors.red,
+            Icons.error_outline_rounded,
+          );
+        }
+      }
+    }
+  }
+
+  void _showStyledSnackBar(
+    String message,
+    Color backgroundColor,
+    IconData icon,
+  ) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: Colors.white, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: backgroundColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        duration: const Duration(seconds: 3),
+        elevation: 6,
+      ),
     );
   }
 
