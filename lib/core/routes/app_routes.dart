@@ -21,6 +21,7 @@ class AppRoutes {
   static const String location = '/location';
   static const String locationHistory = '/location/history';
   static const String geofences = '/geofences';
+  static const String geofenceDetail = '/geofence-detail';
   static const String addGeofence = '/geofences/add';
   static const String editGeofence = '/geofences/edit';
 

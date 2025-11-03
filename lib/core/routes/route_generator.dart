@@ -6,7 +6,7 @@ import './app_routes.dart';
 import 'package:couple_guard/onboarding_screen.dart';
 import '../../modules/auth/src/screens/login_screen.dart';
 import '../../modules/auth/src/screens/register_screen.dart';
-import '../../modules/auth/src/screens/family_screen.dart';
+import '../../modules/auth/src/screens/geofence_detail_screen.dart';
 import '/main.dart'; // Import main.dart untuk mengakses SplashScreen
 
 class RouteGenerator {
@@ -38,6 +38,20 @@ class RouteGenerator {
       case AppRoutes.familyCode:
         print('➡️ Creating FamilyCodeScreen');
         return _createRoute(const FamilyCodeScreen(), settings);
+
+      case AppRoutes.geofenceDetail:
+        print('➡️ Creating GeofenceDetailScreen');
+        if (args != null && args is Map<String, dynamic>) {
+          return _createRoute(GeofenceDetailScreen(arguments: args), settings);
+        } else {
+          print('❌ GeofenceDetail: Invalid arguments');
+          return _createRoute(
+            const Scaffold(
+              body: Center(child: Text('Error: Invalid geofence data')),
+            ),
+            settings,
+          );
+        }
 
       case AppRoutes.forgotPassword:
         return _createRoute(

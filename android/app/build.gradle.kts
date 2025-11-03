@@ -1,19 +1,19 @@
 plugins {
     id("com.android.application")
     id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
     id("com.google.gms.google-services")
 }
 
 android {
-    namespace = "com.coupleguard.app.couple_guard"
+    namespace = "com.example.couple_guard_child"
     compileSdk = 36
     ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -21,10 +21,7 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.coupleguard.app.couple_guard"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        applicationId = "com.example.couple_guard_child"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -33,17 +30,18 @@ android {
 
     buildTypes {
         release {
-            // Untuk testing release APK, jangan shrink/obfuscate
             isMinifyEnabled = false
             isShrinkResources = false
-
-            // sementara pakai debug keystore
             signingConfig = signingConfigs.getByName("debug")
         }
     }
-
 }
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // ✅ Tambahkan ini
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

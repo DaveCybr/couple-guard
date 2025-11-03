@@ -6,20 +6,20 @@ import '../models/geofence_model.dart';
 
 class GeofenceService {
   final String authToken;
-  final int familyId;
   final String _baseUrl = ApiConfig.baseUrl;
 
-  GeofenceService({required this.authToken, required this.familyId});
+  GeofenceService({required this.authToken}); // Hapus familyId dari constructor
 
   Future<bool> createGeofence({
     required String name,
-    required double centerLatitude,
-    required double centerLongitude,
+    required double latitude, // Ganti dari centerLatitude
+    required double longitude, // Ganti dari centerLongitude
     required int radius,
-    required String type,
+    // Hapus parameter type
   }) async {
     try {
-      final url = Uri.parse('$_baseUrl/geofence/create');
+      // Sesuaikan endpoint dengan backend
+      final url = Uri.parse('$_baseUrl/geofences');
 
       final headers = {
         'Content-Type': 'application/json',
@@ -27,17 +27,16 @@ class GeofenceService {
         'Accept': 'application/json',
       };
 
+      // Sesuaikan body dengan backend
       final body = json.encode({
-        'family_id': familyId,
         'name': name,
-        'center_latitude': centerLatitude,
-        'center_longitude': centerLongitude,
+        'latitude': latitude,
+        'longitude': longitude,
         'radius': radius,
-        'type': type,
+        // Hapus family_id dan type
       });
 
       debugPrint('🌐 Creating geofence with data: $body');
-      debugPrint('Bearer $authToken');
       final response = await http.post(url, headers: headers, body: body);
 
       debugPrint('📡 Response status: ${response.statusCode}');
@@ -76,40 +75,61 @@ class GeofenceService {
 
   Future<List<GeofenceModel>?> getGeofences() async {
     try {
-      final url = Uri.parse('$_baseUrl/geofence/list?family_id=$familyId');
-
+      final url = Uri.parse('$_baseUrl/geofences');
       final headers = {
         'Authorization': 'Bearer $authToken',
         'Accept': 'application/json',
       };
 
+      debugPrint('📡 Meminta data geofence dari: $url');
+
       final response = await http.get(url, headers: headers);
+      debugPrint('📥 Status Code: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final responseData = json.decode(response.body);
+        debugPrint('📦 Response Body: $responseData');
 
-        if (responseData['success'] == true &&
-            responseData['geofences'] != null) {
-          final List<dynamic> geofencesJson = responseData['geofences'];
+        if (responseData['success'] == true && responseData['data'] != null) {
+          final data = responseData['data'];
 
-          return geofencesJson
-              .map((json) => GeofenceModel.fromJson(json))
-              .toList();
+          List<GeofenceModel> geofences = [];
+
+          if (data is List) {
+            geofences = data
+                .map(
+                  (e) => GeofenceModel.fromJson(Map<String, dynamic>.from(e)),
+                )
+                .toList();
+          } else if (data is Map) {
+            geofences = [
+              GeofenceModel.fromJson(Map<String, dynamic>.from(data)),
+            ];
+          }
+
+          debugPrint('🎯 Berhasil memuat ${geofences.length} geofence(s)');
+          return geofences;
+        } else {
+          debugPrint('⚠️ Response success=false atau data kosong.');
         }
       } else {
-        debugPrint("⚠️ Failed: ${response.statusCode}, ${response.body}");
+        debugPrint('❌ Gagal memuat geofence.');
+        debugPrint('   ↳ Status Code: ${response.statusCode}');
+        debugPrint('   ↳ Body: ${response.body}');
       }
 
       return null;
-    } catch (e) {
-      debugPrint('❌ Exception in getGeofences: $e');
+    } catch (e, stack) {
+      debugPrint('🚨 Exception dalam getGeofences: $e');
+      debugPrint('📄 Stack trace: $stack');
       return null;
     }
   }
 
   Future<bool> deleteGeofence(int geofenceId) async {
     try {
-      final url = Uri.parse('$_baseUrl/geofence/$geofenceId');
+      // Sesuaikan endpoint dengan backend (jika ada)
+      final url = Uri.parse('$_baseUrl/geofences/$geofenceId');
 
       final headers = {
         'Authorization': 'Bearer $authToken',
@@ -130,19 +150,32 @@ class GeofenceService {
     }
   }
 
-  Future<bool> toggleGeofence(int geofenceId, bool isActive) async {
+  Future<bool> updateGeofence({
+    required int geofenceId,
+    required String name,
+    required double latitude,
+    required double longitude,
+    required int radius,
+  }) async {
     try {
-      final url = Uri.parse('$_baseUrl/geofence/$geofenceId/toggle');
-
+      final url = Uri.parse('$_baseUrl/geofences/$geofenceId');
       final headers = {
-        'Content-Type': 'application/json',
         'Authorization': 'Bearer $authToken',
         'Accept': 'application/json',
+        'Content-Type': 'application/json',
       };
 
-      final body = json.encode({'is_active': isActive});
+      final body = json.encode({
+        'name': name,
+        'latitude': latitude.toString(),
+        'longitude': longitude.toString(),
+        'radius': radius,
+      });
 
-      final response = await http.patch(url, headers: headers, body: body);
+      debugPrint('📝 Update geofence ID $geofenceId: $body');
+
+      final response = await http.put(url, headers: headers, body: body);
+      debugPrint('📥 Status Code: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final responseData = json.decode(response.body);
@@ -151,7 +184,7 @@ class GeofenceService {
 
       return false;
     } catch (e) {
-      debugPrint('❌ Exception in toggleGeofence: $e');
+      debugPrint('🚨 Error update geofence: $e');
       return false;
     }
   }

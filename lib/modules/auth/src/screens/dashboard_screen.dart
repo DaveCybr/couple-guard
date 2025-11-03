@@ -1,6 +1,7 @@
 import 'package:couple_guard/modules/auth/src/screens/album_camera_screen.dart';
 import 'package:couple_guard/modules/auth/src/screens/camera_screen.dart';
 import 'package:couple_guard/modules/auth/src/screens/family_screen.dart';
+import 'package:couple_guard/modules/auth/src/screens/geofence_list_screen.dart';
 import 'package:couple_guard/modules/auth/src/screens/loading_screen.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/constants/app_colors.dart';
@@ -10,13 +11,18 @@ import '../../../../core/routes/app_routes.dart';
 import 'dart:ui' as ui;
 import '../services/family_service.dart';
 import '../services/notification_service.dart';
-import '../services/auth_service.dart';
+import '../services/local_notification_service.dart';
 import '../models/notification_model.dart';
+import '../services/auth_service.dart';
+import '../services/location_service.dart';
+import '../services/command_service.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import './realtime_location.dart';
 import 'package:latlong2/latlong.dart';
-import './geofence_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // Tambahkan ini
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import './album_camera_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -170,16 +176,18 @@ class CustomAppBar extends StatelessWidget implements PreferredSizeWidget {
                           ],
                         ),
                       ),
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.security,
-                          color: Colors.white,
-                          size: 24,
+                      GestureDetector(
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(
+                            Icons.security,
+                            color: Colors.white,
+                            size: 24,
+                          ),
                         ),
                       ),
                     ],
@@ -280,9 +288,396 @@ class _DashboardScreenState extends State<DashboardScreen>
   Map<String, dynamic>? _summary;
   List<DeviceModel> _devices = [];
   bool _isLoadingDevices = false;
-  int? _selectedDeviceId;
+  String? _selectedDeviceId;
   final NotificationService _notificationService = NotificationService();
   final AuthService _authService = AuthService();
+  final GlobalKey<RealtimeMapWidgetState> _mapWidgetKey = GlobalKey();
+  final LocalNotificationService _localNotification =
+      LocalNotificationService();
+  final CommandService commandService = CommandService();
+
+  Future<void> _handleMonitoring(String deviceId, String token) async {
+    print("ditap$deviceId");
+    try {
+      final result = await commandService.startMonitoring(
+        deviceId: deviceId,
+        authToken: token,
+      );
+      print('monitoring requested: ${result['success']}');
+    } catch (e) {
+      print('Error: $e');
+    }
+  }
+
+  Future<void> _handleCapturePhoto(String deviceId, String token) async {
+    print("ditap$deviceId");
+
+    // Snackbar loading
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Text('Mengambil foto...', style: TextStyle(fontSize: 15)),
+          ],
+        ),
+        backgroundColor: Colors.blue[700],
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
+
+    try {
+      final result = await commandService.capturePhoto(
+        deviceId: deviceId,
+        authToken: token,
+      );
+
+      print('Photo captured: ${result['success']}');
+
+      // Snackbar success
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.camera_alt,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Foto berhasil diambil! 📸',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Lihat di menu Album Potretan',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.white.withOpacity(0.9),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green[600],
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error: $e');
+
+      // Snackbar error
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.error_outline,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Gagal mengambil foto',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        e.toString(),
+                        style: const TextStyle(fontSize: 13),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red[700],
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
+            action: SnackBarAction(
+              label: 'Coba Lagi',
+              textColor: Colors.white,
+              onPressed: () {
+                _handleCapturePhoto(deviceId, token);
+              },
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleMonitoringScreen(String deviceId, String token) async {
+    print("ditap$deviceId");
+
+    try {
+      final result = await commandService.startScreenMonitor(
+        deviceId: deviceId,
+        authToken: token,
+      );
+      print('Location requested: ${result['success']}');
+    } catch (e) {
+      print('Error: $e');
+    }
+  }
+
+  Future<void> _handleRequestLocation(String deviceId, String token) async {
+    print("ditap$deviceId");
+    print("ditap$_authToken");
+
+    // Snackbar loading
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Text(
+              'Meminta lokasi perangkat...',
+              style: TextStyle(fontSize: 15),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.blue[700],
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
+
+    try {
+      final result = await commandService.requestLocation(
+        deviceId: deviceId,
+        authToken: token,
+      );
+
+      print('Location requested: ${result['success']}');
+
+      // Snackbar success
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.check_circle,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Permintaan lokasi berhasil dikirim!',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green[600],
+            duration: const Duration(seconds: 3),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error: $e');
+
+      // Snackbar error
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.error_outline,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Gagal meminta lokasi',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        e.toString(),
+                        style: const TextStyle(fontSize: 13),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red[700],
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
+            action: SnackBarAction(
+              label: 'Coba Lagi',
+              textColor: Colors.white,
+              onPressed: () {
+                _handleRequestLocation(deviceId, token);
+              },
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Widget _buildNotificationOption({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: color.withOpacity(0.2)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: color, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: color,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: color, size: 20),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Future<String?> fetchAppIcon(String packageName) async {
     final apiKey =
@@ -334,6 +729,13 @@ class _DashboardScreenState extends State<DashboardScreen>
       _isLoadingNotifications = true;
     });
 
+    debugPrint("🔄 ===== START LOAD NOTIFICATIONS =====");
+    debugPrint("📱 Selected Device ID: $deviceId");
+    debugPrint(
+      "👤 User ID: ${Provider.of<AuthProvider>(context, listen: false).user?.id}",
+    );
+    debugPrint("🔐 Token available: ${_authToken != null}");
+    debugPrint("📋 Total devices: ${_devices.length}");
     try {
       final result = await _notificationService.fetchNotifications(
         authToken: _authToken!,
@@ -375,23 +777,41 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     try {
       final devices = await _authService.getDevicesByParent(
-        parentId: user!.id!, // Ambil dari auth.user.id
-        token: _authToken!, // Gunakan _authtoken
+        parentId: user!.id!,
+        token: _authToken!,
       );
 
       setState(() {
         _devices = devices;
-        // Auto-select device pertama jika ada
+
         if (devices.isNotEmpty && _selectedDeviceId == null) {
-          _selectedDeviceId = devices.first.id;
-          // Load notifications untuk device yang dipilih
-          _loadNotifications(_selectedDeviceId!.toString());
+          // PASTIKAN menggunakan deviceId, bukan id
+          _selectedDeviceId = devices.first.deviceId;
+          debugPrint("✅ Selected device: ${_selectedDeviceId}");
+          _loadNotifications(_selectedDeviceId!);
         }
       });
 
       debugPrint("✅ Berhasil load ${devices.length} devices");
+
+      // DEBUG: Print semua device yang loaded
+      for (var device in devices) {
+        debugPrint('📱 Device: ${device.deviceName}');
+        debugPrint(
+          '   - deviceId: ${device.deviceId} (${device.deviceId.runtimeType})',
+        );
+        debugPrint('   - id: ${device.id} (${device.id.runtimeType})');
+        debugPrint('   - isOnline: ${device.isOnline}');
+      }
     } catch (e) {
       debugPrint("❌ Error load devices: $e");
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal memuat devices: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
     } finally {
       setState(() => _isLoadingDevices = false);
     }
@@ -407,6 +827,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       });
       _loadFamilies(); // panggil setelah token ada
       _loadDevices();
+      // _loadNotifications(_selectedDeviceId!);
     }
   }
 
@@ -467,17 +888,153 @@ class _DashboardScreenState extends State<DashboardScreen>
     _animationController.forward(from: 0);
   }
 
-  void _refreshLocationData() {
-    // Tambahkan logic refresh data lokasi di sini
+  void _refreshLocationData(deviceId) async {
+    if (_authToken == null || _selectedDeviceId == null) {
+      _showErrorSnackBar('Silakan pilih device terlebih dahulu');
+      return;
+    }
+
+    // Show loading indicator
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Memperbarui data lokasi...'),
-        backgroundColor: Colors.blue,
+      SnackBar(
+        content: Row(
+          children: [
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Text('Mengirim permintaan lokasi...'),
+          ],
+        ),
+        backgroundColor: Colors.blue[600],
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        duration: const Duration(seconds: 2),
       ),
     );
 
-    // Contoh: Panggil method refresh di map widget jika ada
-    // _mapController?.refresh();
+    try {
+      // // Panggil API request location
+      // final locationService = LocationPusherService(
+      //   authToken: _authToken!,
+      //   familyId:
+      //       _selectedDeviceId!, // gunakan deviceId di sini (sementara familyId di class)
+      // );
+
+      // // ✅ Panggil fungsi requestLocationUpdate tanpa parameter tambahan
+      // final result = await locationService.requestLocationUpdate();
+
+      final result = await commandService.requestLocation(
+        deviceId: deviceId,
+        authToken: _authToken!,
+      );
+
+      if (mounted) {
+        if (result['success'] == true) {
+          // Berhasil, tunggu sebentar lalu refresh map
+          await Future.delayed(const Duration(seconds: 2));
+
+          // Refresh map widget jika ada
+          if (_mapWidgetKey.currentState != null) {
+            _mapWidgetKey.currentState!.refreshLocation();
+          }
+
+          _showSuccessSnackBar(
+            result['message'] ?? 'Permintaan lokasi berhasil dikirim',
+          );
+        } else {
+          _showErrorSnackBar(
+            result['message'] ?? 'Gagal mengirim permintaan lokasi',
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Error requesting location: $e');
+      if (mounted) {
+        _showErrorSnackBar('Error: ${e.toString()}');
+      }
+    }
+  }
+
+  // Tambahkan helper function untuk success snackbar
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.check_circle_outline_rounded,
+                color: Colors.white,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.green[600],
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
+  Future<void> _fetchLatestLocation() async {
+    try {
+      final locationService = LocationPusherService(
+        authToken: _authToken!,
+        familyId: _selectedDeviceId!, // menggunakan deviceId sebagai familyId
+      );
+
+      final latestLocation = await locationService.fetchInitialLocation();
+
+      if (latestLocation != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Lokasi diperbarui: ${latestLocation.latitude.toStringAsFixed(4)}, ${latestLocation.longitude.toStringAsFixed(4)}',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+
+        // Trigger refresh pada map widget jika perlu
+        // Anda bisa menggunakan GlobalKey atau callback untuk memanggil refresh pada RealtimeMapWidget
+        debugPrint('✅ Lokasi terbaru berhasil diambil');
+      } else {
+        if (mounted) {
+          _showErrorSnackBar('Gagal mendapatkan lokasi terbaru');
+        }
+      }
+    } catch (e) {
+      debugPrint('❌ Error fetching latest location: $e');
+      if (mounted) {
+        _showErrorSnackBar('Error: $e');
+      }
+    }
   }
 
   Widget _buildHomePage() {
@@ -556,12 +1113,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Map view pakai flutter_map
-                        if (_authToken != null && selectedChild != null)
+                        if (_authToken != null && _selectedDeviceId != null)
                           RealtimeMapWidget(
-                            key: ValueKey(
-                              selectedChild,
-                            ), // reset state kalau ganti child
-                            familyId: selectedChild!,
+                            key: _mapWidgetKey, // reset state kalau ganti child
+                            familyId: _selectedDeviceId!,
                             authToken: _authToken!,
                           )
                         else
@@ -598,17 +1153,15 @@ class _DashboardScreenState extends State<DashboardScreen>
                                   child: InkWell(
                                     onTap: () async {
                                       if (_authToken != null &&
-                                          selectedChild != null) {
+                                          _selectedDeviceId != null) {
                                         LatLng? currentLocation;
                                         final result = await Navigator.push(
                                           context,
                                           MaterialPageRoute(
                                             builder: (context) =>
-                                                GeofenceScreen(
-                                                  familyId: selectedChild!,
+                                                GeofenceListScreen(
+                                                  familyId: _selectedDeviceId!,
                                                   authToken: _authToken!,
-                                                  initialLocation:
-                                                      currentLocation,
                                                 ),
                                           ),
                                         );
@@ -687,7 +1240,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                                   ),
                                   child: InkWell(
                                     onTap: () {
-                                      _refreshLocationData();
+                                      _handleRequestLocation(
+                                        _selectedDeviceId!,
+                                        _authToken!,
+                                      );
                                     },
                                     borderRadius: BorderRadius.circular(12),
                                     child: Container(
@@ -795,89 +1351,97 @@ class _DashboardScreenState extends State<DashboardScreen>
                     ),
                   ),
 
-                  // Content
+                  // Content - Grid 2x2
                   Padding(
                     padding: const EdgeInsets.all(20),
-                    child: Row(
+                    child: Column(
                       children: [
-                        Expanded(
-                          child: _buildMonitoringButton(
-                            icon: Icons.photo_camera_rounded,
-                            label: 'Album\nPotretan',
-                            color: Colors.blue,
-                            gradientColors: [
-                              Colors.blue[400]!,
-                              Colors.blue[600]!,
-                            ],
-                            onTap: () {
-                              if (selectedChild != null && _authToken != null) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => AlbumCameraScreen(
-                                      selectedChildId: selectedChild!,
-                                      jwtToken: _authToken!,
+                        // Baris pertama (2 menu atas)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildMonitoringButton(
+                                icon: Icons.photo_album_rounded,
+                                label: 'Album\nPotretan',
+                                color: Colors.blue,
+                                gradientColors: [
+                                  Colors.blue[400]!,
+                                  Colors.blue[600]!,
+                                ],
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          ScreenshotGalleryPage(
+                                            deviceId: _selectedDeviceId!,
+                                            authToken: _authToken!,
+                                          ),
                                     ),
-                                  ),
-                                );
-                              } else {
-                                _showErrorSnackBar(
-                                  'Pilih family terlebih dahulu',
-                                );
-                              }
-                            },
-                          ),
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: _buildMonitoringButton(
+                                icon: Icons.camera_alt_rounded,
+                                label: 'Potretan\nSekali',
+                                color: Colors.teal,
+                                gradientColors: [
+                                  Colors.teal[400]!,
+                                  Colors.teal[600]!,
+                                ],
+                                onTap: () {
+                                  _handleCapturePhoto(
+                                    _selectedDeviceId!,
+                                    _authToken!,
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _buildMonitoringButton(
-                            icon: Icons.videocam_rounded,
-                            label: 'Kamera\nLive',
-                            color: Colors.purple,
-                            gradientColors: [
-                              Colors.purple[400]!,
-                              Colors.purple[600]!,
-                            ],
-                            onTap: () {
-                              if (selectedChild != null && _authToken != null) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => CameraScreen(
-                                      selectedChildId: selectedChild!,
-                                      jwtToken: _authToken!,
-                                    ),
-                                  ),
-                                );
-                              } else {
-                                _showErrorSnackBar(
-                                  'Pilih family terlebih dahulu',
-                                );
-                              }
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _buildMonitoringButton(
-                            icon: Icons.screenshot_monitor_rounded,
-                            label: 'Layar\nLive',
-                            color: Colors.orange,
-                            gradientColors: [
-                              Colors.orange[400]!,
-                              Colors.orange[600]!,
-                            ],
-                            onTap: () {
-                              if (selectedChild != null && _authToken != null) {
-                                // TODO: Navigate to live screen
-                                _showInfoSnackBar('Fitur dalam pengembangan');
-                              } else {
-                                _showErrorSnackBar(
-                                  'Pilih family terlebih dahulu',
-                                );
-                              }
-                            },
-                          ),
+                        const SizedBox(height: 16),
+                        // Baris kedua (2 menu bawah)
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildMonitoringButton(
+                                icon: Icons.videocam_rounded,
+                                label: 'Kamera\nLive',
+                                color: Colors.purple,
+                                gradientColors: [
+                                  Colors.purple[400]!,
+                                  Colors.purple[600]!,
+                                ],
+                                onTap: () {
+                                  _handleMonitoring(
+                                    _selectedDeviceId!,
+                                    _authToken!,
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: _buildMonitoringButton(
+                                icon: Icons.screenshot_monitor_rounded,
+                                label: 'Layar\nLive',
+                                color: Colors.orange,
+                                gradientColors: [
+                                  Colors.orange[400]!,
+                                  Colors.orange[600]!,
+                                ],
+                                onTap: () {
+                                  _handleMonitoringScreen(
+                                    _selectedDeviceId!,
+                                    _authToken!,
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -1096,8 +1660,8 @@ class _DashboardScreenState extends State<DashboardScreen>
   Widget _buildActivitiesPage() {
     return Column(
       children: [
-        // Device Selector
-        _buildDeviceSelector(),
+        // Device Button (jika ada device)
+        if (_devices.isNotEmpty) _buildDeviceButton(),
 
         // Notifications List
         Expanded(child: _buildNotificationsList()),
@@ -1105,35 +1669,7 @@ class _DashboardScreenState extends State<DashboardScreen>
     );
   }
 
-  Widget _buildDeviceSelector() {
-    if (_isLoadingDevices) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.grey.withOpacity(0.1),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: const Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            SizedBox(width: 12),
-            Text("Memuat devices...", style: TextStyle(color: Colors.grey)),
-          ],
-        ),
-      );
-    }
-
+  Widget _buildDeviceButton() {
     if (_devices.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(16),
@@ -1156,6 +1692,9 @@ class _DashboardScreenState extends State<DashboardScreen>
       );
     }
 
+    final device = _devices.first; // Ambil device pertama (karena hanya 1)
+    final isSelected = _selectedDeviceId == device.deviceId;
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -1172,91 +1711,87 @@ class _DashboardScreenState extends State<DashboardScreen>
         children: [
           const Icon(Icons.phone_android, size: 20, color: Colors.blue),
           const SizedBox(width: 8),
-          const Text("Device:", style: TextStyle(fontWeight: FontWeight.w500)),
-          const SizedBox(width: 8),
           Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: Colors.grey[50],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.grey[300]!),
-              ),
-              child: DropdownButton<int>(
-                value: _selectedDeviceId,
-                isExpanded: true,
-                underline: const SizedBox(),
-                icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
-                items: _devices.map((device) {
-                  return DropdownMenuItem<int>(
-                    value: device.id,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          device.deviceName,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w500,
-                            fontSize: 14,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          device.deviceId,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey[600],
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: device.isOnline
-                                    ? Colors.green
-                                    : Colors.grey,
-                                shape: BoxShape.circle,
-                              ),
+            child: InkWell(
+              onTap: () {
+                setState(() {
+                  _selectedDeviceId = device.deviceId;
+                });
+                debugPrint("🔄 Device selected: ${device.deviceId}");
+                _loadNotifications(device.deviceId);
+              },
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isSelected ? Colors.blue[50] : Colors.grey[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isSelected ? Colors.blue : Colors.grey[300]!,
+                    width: isSelected ? 2 : 1,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            device.deviceName,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                              color: isSelected
+                                  ? Colors.blue[900]
+                                  : Colors.black,
                             ),
-                            const SizedBox(width: 4),
-                            Text(
-                              device.isOnline ? 'Online' : 'Offline',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: device.isOnline
-                                    ? Colors.green
-                                    : Colors.grey,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: device.isOnline
+                                      ? Colors.green
+                                      : Colors.grey,
+                                  shape: BoxShape.circle,
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                      ],
+                              const SizedBox(width: 4),
+                              Text(
+                                device.isOnline ? 'Online' : 'Offline',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                  color: device.isOnline
+                                      ? Colors.green
+                                      : Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                  );
-                }).toList(),
-                onChanged: (int? newValue) {
-                  if (newValue != null) {
-                    setState(() {
-                      _selectedDeviceId = newValue;
-                    });
-                    // Load notifications untuk device yang baru dipilih
-                    _loadNotifications(newValue.toString());
-                  }
-                },
+                    if (isSelected)
+                      Icon(Icons.check_circle, color: Colors.blue, size: 20),
+                  ],
+                ),
               ),
             ),
           ),
-          const SizedBox(width: 8),
-          // Tombol refresh devices
-          IconButton(
-            icon: const Icon(Icons.refresh, size: 20),
-            onPressed: _loadDevices,
-            tooltip: "Refresh Devices",
-          ),
+          // const SizedBox(width: 8),
+          // IconButton(
+          //   icon: const Icon(Icons.refresh, size: 20),
+          //   onPressed: _loadDevices,
+          //   tooltip: "Refresh Devices",
+          // ),
         ],
       ),
     );
@@ -1271,7 +1806,7 @@ class _DashboardScreenState extends State<DashboardScreen>
             Icon(Icons.phone_android, size: 64, color: Colors.grey),
             SizedBox(height: 16),
             Text(
-              "Pilih device untuk melihat notifikasi",
+              "Tap device di atas untuk melihat notifikasi",
               style: TextStyle(fontSize: 16, color: Colors.grey),
             ),
           ],
@@ -1474,14 +2009,6 @@ class _DashboardScreenState extends State<DashboardScreen>
                               ),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              notification.appName,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
                             ),
                           ],
                         ),
@@ -1929,12 +2456,13 @@ class _DashboardScreenState extends State<DashboardScreen>
 
     if (confirm == true) {
       try {
+        await _resetFamilyCodeStatus();
         await Provider.of<AuthProvider>(context, listen: false).logout();
 
         if (context.mounted) {
           Navigator.of(
             context,
-          ).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
+          ).pushNamedAndRemoveUntil(AppRoutes.register, (route) => false);
         }
       } catch (e) {
         if (context.mounted) {
@@ -1945,6 +2473,16 @@ class _DashboardScreenState extends State<DashboardScreen>
           );
         }
       }
+    }
+  }
+
+  Future<void> _resetFamilyCodeStatus() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('hasSeenFamilyCode', false);
+      print('✅ Logout - hasSeenFamilyCode diset false');
+    } catch (e) {
+      print('❌ Error resetting hasSeenFamilyCode: $e');
     }
   }
 

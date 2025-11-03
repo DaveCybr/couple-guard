@@ -1,55 +1,47 @@
 class GeofenceModel {
   final int id;
-  final int familyId;
+  final int parentId;
   final String name;
-  final double centerLatitude;
-  final double centerLongitude;
+  final double latitude;
+  final double longitude;
   final int radius;
-  final String type;
   final bool isActive;
   final DateTime createdAt;
-  final DateTime updatedAt;
 
   GeofenceModel({
     required this.id,
-    required this.familyId,
+    required this.parentId,
     required this.name,
-    required this.centerLatitude,
-    required this.centerLongitude,
+    required this.latitude,
+    required this.longitude,
     required this.radius,
-    required this.type,
     required this.isActive,
     required this.createdAt,
-    required this.updatedAt,
   });
 
   factory GeofenceModel.fromJson(Map<String, dynamic> json) {
     return GeofenceModel(
-      id: json['id'],
-      familyId: json['family_id'],
-      name: json['name'],
-      centerLatitude: double.parse(json['center_latitude'].toString()),
-      centerLongitude: double.parse(json['center_longitude'].toString()),
-      radius: json['radius'],
-      type: json['type'],
-      isActive: json['is_active'] == 1 || json['is_active'] == true,
-      createdAt: DateTime.parse(json['created_at']),
-      updatedAt: DateTime.parse(json['updated_at']),
+      id: json['id'] as int,
+      parentId: json['parent_id'] as int,
+      name: json['name'] as String,
+      latitude: double.parse(json['latitude'].toString()),
+      longitude: double.parse(json['longitude'].toString()),
+      radius: json['radius'] as int,
+      isActive: json['is_active'] as bool,
+      createdAt: DateTime.parse(json['created_at'] as String),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'family_id': familyId,
+      'parent_id': parentId,
       'name': name,
-      'center_latitude': centerLatitude,
-      'center_longitude': centerLongitude,
+      'latitude': latitude.toString(),
+      'longitude': longitude.toString(),
       'radius': radius,
-      'type': type,
       'is_active': isActive,
       'created_at': createdAt.toIso8601String(),
-      'updated_at': updatedAt.toIso8601String(),
     };
   }
 }

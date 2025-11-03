@@ -177,34 +177,226 @@ class _FamilyCodeScreenState extends State<FamilyCodeScreen>
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: FadeTransition(
-          opacity: _fadeAnimation,
-          child: SlideTransition(
-            position: _slideAnimation,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(AppConstants.defaultPadding),
-              child: Column(
-                children: [
-                  const SizedBox(height: 40),
-                  _buildHeader(),
-                  const SizedBox(height: 40),
-                  if (_isLoading)
-                    _buildLoadingIndicator()
-                  else
-                    Column(
+        child: _isLoading
+            ? _buildFullScreenLoading() // ✅ Full screen loading
+            : FadeTransition(
+                opacity: _fadeAnimation,
+                child: SlideTransition(
+                  position: _slideAnimation,
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(AppConstants.defaultPadding),
+                    child: Column(
                       children: [
+                        const SizedBox(height: 40),
+                        _buildHeader(),
+                        const SizedBox(height: 40),
                         _buildFamilyCodeCard(familyCode),
                         const SizedBox(height: 24),
                         _buildInfoBox(),
                         if (_isDevicePaired) _buildPairingSuccess(),
                       ],
                     ),
-                ],
+                  ),
+                ),
               ),
+      ),
+    );
+  }
+
+  Widget _buildFullScreenLoading() {
+    return Container(
+      width: double.infinity,
+      height: double.infinity,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            AppColors.primary.withOpacity(0.1),
+            AppColors.background,
+            AppColors.secondary.withOpacity(0.1),
+          ],
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // ✅ Animated Icon
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.0, end: 1.0),
+            duration: const Duration(milliseconds: 1500),
+            builder: (context, value, child) {
+              return Transform.scale(
+                scale: 0.8 + (value * 0.2),
+                child: Container(
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    gradient: AppColors.primaryGradient,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withOpacity(0.4),
+                        blurRadius: 30,
+                        spreadRadius: 5,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    Icons.wifi_tethering,
+                    size: 60,
+                    color: AppColors.white.withOpacity(value),
+                  ),
+                ),
+              );
+            },
+          ),
+
+          const SizedBox(height: 40),
+
+          // ✅ Loading Spinner
+          SizedBox(
+            width: 50,
+            height: 50,
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+              strokeWidth: 4,
+            ),
+          ),
+
+          const SizedBox(height: 32),
+
+          // ✅ Main Text
+          Text(
+            'Menyiapkan Koneksi',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+              letterSpacing: 0.5,
+            ),
+            textAlign: TextAlign.center,
+          ),
+
+          const SizedBox(height: 12),
+
+          // ✅ Subtitle with animation
+          TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.0, end: 1.0),
+            duration: const Duration(milliseconds: 800),
+            builder: (context, value, child) {
+              return Opacity(
+                opacity: value,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 40),
+                  child: Text(
+                    'Menghubungkan ke server real-time\nMohon tunggu sebentar...',
+                    style: TextStyle(
+                      fontSize: 15,
+                      color: AppColors.textSecondary,
+                      height: 1.5,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              );
+            },
+          ),
+
+          const SizedBox(height: 40),
+
+          // ✅ Loading steps indicator
+          _buildLoadingSteps(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingSteps() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 40),
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.white.withOpacity(0.8),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.shadow.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          _buildLoadingStep(
+            icon: Icons.link,
+            text: 'Menginisialisasi Pusher',
+            isActive: true,
+          ),
+          const SizedBox(height: 12),
+          _buildLoadingStep(
+            icon: Icons.wifi,
+            text: 'Menghubungkan ke channel',
+            isActive: true,
+          ),
+          const SizedBox(height: 12),
+          _buildLoadingStep(
+            icon: Icons.check_circle_outline,
+            text: 'Menunggu pairing device',
+            isActive: false,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoadingStep({
+    required IconData icon,
+    required String text,
+    required bool isActive,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: isActive
+                ? AppColors.primary.withOpacity(0.1)
+                : AppColors.background,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: isActive ? AppColors.primary : AppColors.textSecondary,
+              width: 2,
+            ),
+          ),
+          child: isActive
+              ? SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      AppColors.primary,
+                    ),
+                    strokeWidth: 2,
+                  ),
+                )
+              : Icon(icon, size: 18, color: AppColors.textSecondary),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+              color: isActive ? AppColors.textPrimary : AppColors.textSecondary,
             ),
           ),
         ),
-      ),
+      ],
     );
   }
 
@@ -248,26 +440,6 @@ class _FamilyCodeScreenState extends State<FamilyCodeScreen>
           textAlign: TextAlign.center,
         ),
       ],
-    );
-  }
-
-  Widget _buildLoadingIndicator() {
-    return Container(
-      padding: const EdgeInsets.all(40),
-      child: Column(
-        children: [
-          CircularProgressIndicator(
-            valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Menyiapkan koneksi real-time...',
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
-          ),
-        ],
-      ),
     );
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'core/constants/app_colors.dart';
 import 'core/constants/app_constants.dart';
@@ -12,14 +13,19 @@ import 'core/routes/app_routes.dart';
 import 'modules/auth/src/providers/auth_provider.dart';
 import 'modules/auth/src/services/auth_service.dart';
 import 'modules/auth/src/storages/secure_storage.dart';
+import 'modules/auth/src/services/local_notification_service.dart';
+import 'modules/auth/src/services/fcm_services.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  final prefs = await SharedPreferences.getInstance();
 
-  //aktifkan jika ingin menghapus semua data shared preferences
-  //await prefs.clear();
-  runApp(CoupleGuardApp());
+  await Firebase.initializeApp();
+
+  // 🔔 Inisialisasi layanan FCM dan notifikasi lokal
+  await FCMService().initialize();
+  await LocalNotificationService().initialize();
+
+  runApp(const CoupleGuardApp());
 }
 
 class CoupleGuardApp extends StatelessWidget {

@@ -1,6 +1,6 @@
 class NotificationModel {
   final int id;
-  final int deviceId; // Ganti dari childUserId
+  final String deviceId; // Ganti dari childUserId
   final String appName; // Ganti dari appPackage
   final String title;
   final String content;
@@ -18,7 +18,7 @@ class NotificationModel {
   factory NotificationModel.fromJson(Map<String, dynamic> json) {
     return NotificationModel(
       id: json['id'] as int,
-      deviceId: json['device_id'] as int,
+      deviceId: json['device_id'] as String,
       appName: json['app_name'] as String,
       title: json['title'] as String,
       content: json['content'] as String,

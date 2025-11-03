@@ -94,7 +94,7 @@ class AuthService {
     required String token,
   }) async {
     final response = await http.get(
-      Uri.parse("$_baseUrl/devices/by-parent/$parentId"),
+      Uri.parse("$_baseUrl/devices/id_device/$parentId"),
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
@@ -104,9 +104,30 @@ class AuthService {
 
     if (response.statusCode == 200) {
       final responseData = jsonDecode(response.body);
-      List<dynamic> devicesJson = responseData['data'];
 
-      return devicesJson.map((device) => DeviceModel.fromJson(device)).toList();
+      // DEBUG: Print response structure
+      print('📱 Devices API Response:');
+      print('Full response: $responseData');
+
+      if (responseData['data'] is List) {
+        List<dynamic> devicesJson = responseData['data'];
+
+        // DEBUG: Print each device details
+        for (var i = 0; i < devicesJson.length; i++) {
+          print('--- Device $i ---');
+          print('Full data: ${devicesJson[i]}');
+          print('device_id: ${devicesJson[i]['device_id']}');
+          print('device_id type: ${devicesJson[i]['device_id']?.runtimeType}');
+          print('device_name: ${devicesJson[i]['device_name']}');
+          print('is_online: ${devicesJson[i]['is_online']}');
+        }
+
+        return devicesJson
+            .map((device) => DeviceModel.fromJson(device))
+            .toList();
+      } else {
+        throw Exception("Invalid data format: expected List");
+      }
     } else {
       throw Exception(
         "Gagal mengambil devices: ${response.statusCode} ${response.body}",
@@ -117,15 +138,15 @@ class AuthService {
 
 // DeviceModel
 class DeviceModel {
-  final int id;
-  final String deviceId;
+  final int? id; // Optional, hanya untuk reference
+  final String deviceId; // Ini yang dipakai untuk notifikasi
   final String deviceName;
   final String deviceType;
   final bool isOnline;
   final String? lastSeen;
 
   DeviceModel({
-    required this.id,
+    this.id,
     required this.deviceId,
     required this.deviceName,
     required this.deviceType,
@@ -135,12 +156,19 @@ class DeviceModel {
 
   factory DeviceModel.fromJson(Map<String, dynamic> json) {
     return DeviceModel(
-      id: json['id'],
-      deviceId: json['device_id'],
-      deviceName: json['device_name'],
-      deviceType: json['device_type'],
-      isOnline: json['is_online'],
-      lastSeen: json['last_seen'],
+      id: _parseInt(json['id']),
+      deviceId: json['device_id']?.toString() ?? '', // Pastikan String
+      deviceName: json['device_name']?.toString() ?? '',
+      deviceType: json['device_type']?.toString() ?? '',
+      isOnline: json['is_online'] == true || json['is_online'] == 'true',
+      lastSeen: json['last_seen']?.toString(),
     );
+  }
+
+  static int? _parseInt(dynamic value) {
+    if (value == null) return null;
+    if (value is int) return value;
+    if (value is String) return int.tryParse(value);
+    return null;
   }
 }

@@ -1,116 +1,223 @@
-import 'dart:convert';
-import 'package:flutter/material.dart';
+// services/location_service.dart
 import 'package:pusher_channels_flutter/pusher_channels_flutter.dart';
-import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 import 'package:couple_guard/core/configs/api_config.dart';
-
-typedef OnLocationUpdated = void Function(LatLng newLocation);
 
 class LocationPusherService {
   final String authToken;
-  final int familyId;
-  final PusherChannelsFlutter _pusher = PusherChannelsFlutter.getInstance();
-  final String _baseUrl = ApiConfig.baseUrl; // ganti sesuai URL backend
+  final String familyId;
+  late PusherChannelsFlutter pusher;
+  bool _isConnected = false;
+  Function(LatLng)? onLocationUpdated;
+  final String _baseUrl = ApiConfig.baseUrl;
 
   LocationPusherService({required this.authToken, required this.familyId});
 
+  // Model untuk response lokasi dari API
+
+  // Fetch lokasi awal dari API
   Future<LatLng?> fetchInitialLocation() async {
     try {
-      final url = Uri.parse("$_baseUrl/location/track/$familyId");
+      print("📍 Fetching initial location for family: $familyId");
+
+      // Ganti dengan endpoint API Anda untuk mendapatkan lokasi terbaru
       final response = await http.get(
-        url,
+        Uri.parse('$_baseUrl/locations/$familyId/latest'),
         headers: {
           'Authorization': 'Bearer $authToken',
-          'Accept': 'application/json',
+          'Content-Type': 'application/json',
         },
       );
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (data['success'] == true && data['location'] != null) {
-          final loc = data['location'];
-          return LatLng(
-            double.parse(loc['latitude'].toString()),
-            double.parse(loc['longitude'].toString()),
-          );
-        }
+        final data = json.decode(response.body);
+        final location = LocationResponse.fromJson(data['data']);
+        print(
+          "✅ Initial location: ${location.latitude}, ${location.longitude}",
+        );
+        return location.toLatLng();
+      } else {
+        print("❌ Failed to fetch initial location: ${response.statusCode}");
+        return null;
       }
     } catch (e) {
-      debugPrint("💥 ERROR fetchInitialLocation: $e");
+      print("❌ Error fetching initial location: $e");
+      return null;
     }
-    return null;
   }
 
-  Future<void> initPusher({
-    required OnLocationUpdated onLocationUpdated,
-  }) async {
+  Future<Map<String, dynamic>> requestLocationUpdate() async {
     try {
-      await _pusher.init(
-        apiKey: 'a15743bef505b8594201',
-        cluster: 'ap1',
-        onConnectionStateChange: (currentState, previousState) {
-          debugPrint("🔌 Pusher state: $previousState -> $currentState");
-          if (currentState == 'CONNECTED' && previousState == 'CONNECTING') {
-            _subscribeToChannel(onLocationUpdated: onLocationUpdated);
-          }
-        },
-        onError: (message, code, error) {
-          debugPrint("❌ Pusher Error: $message | code: $code | error: $error");
-        },
-        onAuthorizer: (channelName, socketId, options) async {
-          final authUrl = Uri.parse("$_baseUrl/broadcasting/auth");
-          final response = await http.post(
-            authUrl,
-            headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
-              'Authorization': 'Bearer $authToken',
-            },
-            body: jsonEncode({
-              'socket_id': socketId,
-              'channel_name': channelName,
-            }),
-          );
+      final url = Uri.parse('$_baseUrl/commands/request-location');
 
-          if (response.statusCode == 200) {
-            return jsonDecode(response.body);
-          } else {
-            throw Exception('Failed to authorize Pusher channel');
-          }
+      final response = await http.post(
+        url,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $authToken',
         },
+        body: json.encode({'device_id': familyId}),
       );
 
-      await _pusher.connect();
+      final responseData = json.decode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true,
+          'message':
+              responseData['message'] ?? 'Permintaan lokasi berhasil dikirim',
+          'data': responseData,
+        };
+      } else {
+        return {
+          'success': false,
+          'message':
+              responseData['message'] ?? 'Gagal mengirim permintaan lokasi',
+          'error': responseData,
+        };
+      }
     } catch (e) {
-      debugPrint("💥 ERROR initializing Pusher: $e");
+      return {'success': false, 'message': 'Error: $e', 'error': e.toString()};
     }
   }
 
-  Future<void> _subscribeToChannel({
-    required OnLocationUpdated onLocationUpdated,
-  }) async {
-    final channelName = 'private-family.$familyId';
-    await _pusher.subscribe(
-      channelName: channelName,
-      onEvent: (event) {
-        if (event.eventName == 'location.updated') {
-          try {
-            final data = jsonDecode(event.data);
-            final lat = double.parse(data['latitude'].toString());
-            final lng = double.parse(data['longitude'].toString());
-            onLocationUpdated(LatLng(lat, lng));
-          } catch (e) {
-            debugPrint("⚠️ Failed parse location update: $e");
+  // Inisialisasi Pusher
+  Future<void> initPusher({required Function(LatLng) onLocationUpdated}) async {
+    try {
+      this.onLocationUpdated = onLocationUpdated;
+
+      pusher = PusherChannelsFlutter.getInstance();
+
+      await pusher.init(
+        apiKey: 'a15743bef505b8594201', // Ganti dengan API key Pusher Anda
+        cluster: 'ap1', // Ganti dengan cluster Pusher Anda
+        onConnectionStateChange: onConnectionStateChange,
+        // onError: onError,
+        onSubscriptionSucceeded: onSubscriptionSucceeded,
+        onEvent: onEvent,
+        onSubscriptionError: onSubscriptionError,
+      );
+
+      await pusher.connect();
+
+      // Subscribe ke channel umum untuk semua device dalam family
+      await pusher.subscribe(channelName: 'location-updates');
+      print("✅ Subscribed to location-updates channel");
+    } catch (e) {
+      print("❌ Error initializing Pusher: $e");
+      throw Exception('Failed to initialize Pusher: $e');
+    }
+  }
+
+  // Event handlers untuk Pusher
+  void onConnectionStateChange(dynamic currentState, dynamic previousState) {
+    print("🔌 Pusher Connection: $previousState -> $currentState");
+    _isConnected = currentState == 'connected';
+  }
+
+  void onError(dynamic error) {
+    print("❌ Pusher Error: $error");
+  }
+
+  void onSubscriptionSucceeded(String channelName, dynamic data) {
+    print("✅ Subscribed to channel: $channelName");
+  }
+
+  void onSubscriptionError(String channelName, dynamic error) {
+    print("❌ Subscription error to $channelName: $error");
+  }
+
+  void onEvent(PusherEvent event) {
+    print("📡 Pusher Event: ${event.eventName} on ${event.channelName}");
+
+    if (event.eventName == 'location.updated') {
+      try {
+        final data = json.decode(event.data!);
+
+        // Validasi data yang diterima
+        if (data['latitude'] != null && data['longitude'] != null) {
+          final newLocation = LatLng(
+            double.parse(data['latitude'].toString()),
+            double.parse(data['longitude'].toString()),
+          );
+
+          print(
+            "📍 Location update received: ${newLocation.latitude}, ${newLocation.longitude}",
+          );
+
+          // Panggil callback dengan lokasi baru
+          onLocationUpdated?.call(newLocation);
+
+          // Log violations jika ada
+          if (data['violations'] != null &&
+              (data['violations'] as List).isNotEmpty) {
+            print("🚨 Geofence violations detected: ${data['violations']}");
           }
+        } else {
+          print("⚠️ Invalid location data received: $data");
         }
-      },
+      } catch (e) {
+        print("❌ Error parsing location data: $e");
+      }
+    }
+  }
+
+  // Subscribe ke device tertentu
+  Future<void> subscribeToDevice(String deviceId) async {
+    try {
+      await pusher.subscribe(channelName: 'device.$deviceId');
+      print("✅ Subscribed to device channel: device.$deviceId");
+    } catch (e) {
+      print("❌ Error subscribing to device channel: $e");
+    }
+  }
+
+  // Unsubscribe dari device
+  Future<void> unsubscribeFromDevice(String deviceId) async {
+    try {
+      await pusher.unsubscribe(channelName: 'device.$deviceId');
+      print("✅ Unsubscribed from device channel: device.$deviceId");
+    } catch (e) {
+      print("❌ Error unsubscribing from device channel: $e");
+    }
+  }
+
+  // Dispose resources
+  void dispose() {
+    try {
+      pusher.disconnect();
+      print("🔌 Pusher disconnected");
+    } catch (e) {
+      print("❌ Error disposing Pusher: $e");
+    }
+  }
+
+  // Get connection status
+  bool get isConnected => _isConnected;
+}
+
+class LocationResponse {
+  final double latitude;
+  final double longitude;
+  final String timestamp;
+
+  LocationResponse({
+    required this.latitude,
+    required this.longitude,
+    required this.timestamp,
+  });
+
+  factory LocationResponse.fromJson(Map<String, dynamic> json) {
+    return LocationResponse(
+      latitude: double.parse(json['latitude'].toString()),
+      longitude: double.parse(json['longitude'].toString()),
+      timestamp: json['timestamp'] ?? '',
     );
   }
 
-  void dispose() {
-    final channelName = 'private-family.$familyId';
-    _pusher.unsubscribe(channelName: channelName);
-    _pusher.disconnect();
+  LatLng toLatLng() {
+    return LatLng(latitude, longitude);
   }
 }
