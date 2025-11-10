@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Tambahkan ini
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/routes/app_routes.dart';
 import '../providers/auth_provider.dart';
 import '../../../../core/constants/app_colors.dart';
@@ -33,18 +33,21 @@ class _RegisterScreenState extends State<RegisterScreen>
     super.initState();
     _initAnimations();
     _startAnimations();
-    _checkIfAlreadyRegistered(); // Tambahkan pengecekan
+    _checkIfAlreadyRegistered();
   }
 
-  // Tambahkan method untuk cek status
+  // Method untuk cek status register
   Future<void> _checkIfAlreadyRegistered() async {
     final prefs = await SharedPreferences.getInstance();
     final hasSeenFamilyCode = prefs.getBool('hasSeenFamilyCode') ?? false;
+    final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
 
     print('🔍 RegisterScreen - hasSeenFamilyCode: $hasSeenFamilyCode');
+    print('🔍 RegisterScreen - isLoggedIn: $isLoggedIn');
 
-    if (hasSeenFamilyCode && mounted) {
-      print('➡️ User sudah registered, redirect ke family code');
+    // Jika sudah pernah register dan masih login, redirect ke family code
+    if (hasSeenFamilyCode && isLoggedIn && mounted) {
+      print('➡️ User sudah registered dan login, redirect ke family code');
       Navigator.of(context).pushReplacementNamed(AppRoutes.familyCode);
     }
   }
@@ -102,8 +105,8 @@ class _RegisterScreenState extends State<RegisterScreen>
       if (!mounted) return;
 
       if (success) {
-        // ✅ Setelah register berhasil, SIMPAN STATUS dan ke family code
-        await _markFamilyCodeAsSeen();
+        // ✅ Setelah register berhasil, SIMPAN STATUS
+        await _markAsRegisteredAndLoggedIn();
 
         Navigator.of(
           context,
@@ -132,14 +135,16 @@ class _RegisterScreenState extends State<RegisterScreen>
     }
   }
 
-  // Tambahkan method untuk menyimpan status
-  Future<void> _markFamilyCodeAsSeen() async {
+  // ✅ Method untuk menyimpan status register & auto login
+  Future<void> _markAsRegisteredAndLoggedIn() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('hasSeenFamilyCode', true);
+      await prefs.setBool('isLoggedIn', true); // ✅ Auto login setelah register
       print('✅ RegisterScreen - hasSeenFamilyCode diset true');
+      print('✅ RegisterScreen - isLoggedIn diset true (auto login)');
     } catch (e) {
-      print('❌ Error saving hasSeenFamilyCode: $e');
+      print('❌ Error saving flags: $e');
     }
   }
 
@@ -179,10 +184,10 @@ class _RegisterScreenState extends State<RegisterScreen>
                 child: _buildRegisterForm(),
               ),
 
-              // const SizedBox(height: 24),
+              const SizedBox(height: 24),
 
-              // // Login Link
-              // FadeTransition(opacity: _fadeAnimation, child: _buildLoginLink()),
+              // Login Link
+              FadeTransition(opacity: _fadeAnimation, child: _buildLoginLink()),
             ],
           ),
         ),

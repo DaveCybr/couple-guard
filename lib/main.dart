@@ -126,25 +126,40 @@ class _SplashScreenState extends State<SplashScreen>
       final prefs = await SharedPreferences.getInstance();
       final hasOnboarded = prefs.getBool('hasOnboarded') ?? false;
       final hasSeenFamilyCode = prefs.getBool('hasSeenFamilyCode') ?? false;
+      final isLoggedIn = prefs.getBool('isLoggedIn') ?? false; // ✅ NEW!
+      final isDevicePaired = prefs.getBool('isDevicePaired') ?? false; // ✅ NEW!
 
       print('📢 SplashScreen - hasOnboarded: $hasOnboarded');
       print('📢 SplashScreen - hasSeenFamilyCode: $hasSeenFamilyCode');
+      print('📢 SplashScreen - isLoggedIn: $isLoggedIn');
+      print('📢 SplashScreen - isDevicePaired: $isDevicePaired');
 
       // Tunggu minimal 2 detik total untuk splash screen
       await Future.delayed(const Duration(seconds: 2));
 
       if (!mounted) return;
 
-      // Navigasi berdasarkan status
+      // Navigasi berdasarkan status dengan prioritas
       if (!hasOnboarded) {
+        // 1️⃣ Belum onboarding → Onboarding
         print('➡️ Navigate to onboarding');
         Navigator.of(context).pushReplacementNamed(AppRoutes.onboarding);
       } else if (!hasSeenFamilyCode) {
+        // 2️⃣ Belum pernah register → Register
         print('➡️ Navigate to register');
         Navigator.of(context).pushReplacementNamed(AppRoutes.register);
-      } else {
+      } else if (!isLoggedIn) {
+        // 3️⃣ Sudah register tapi belum login → Login
+        print('➡️ Navigate to login');
+        Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+      } else if (!isDevicePaired) {
+        // 4️⃣ Sudah login tapi belum paired → Family Code
         print('➡️ Navigate to family code');
         Navigator.of(context).pushReplacementNamed(AppRoutes.familyCode);
+      } else {
+        // 5️⃣ Sudah login & paired → Dashboard
+        print('➡️ Navigate to dashboard');
+        Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
       }
     } catch (e) {
       print('❌ Error checking onboarding status: $e');

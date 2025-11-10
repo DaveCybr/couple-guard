@@ -28,20 +28,75 @@ class _FamilyCodeScreenState extends State<FamilyCodeScreen>
   String? _pairedDeviceName;
   bool _isLoading = true;
 
-  String? _familyCode; // ✅ Simpan kode keluarga di sini
+  String? _familyCode;
 
   @override
   void initState() {
     super.initState();
     _initAnimations();
     _markFamilyCodeAsSeen();
+    _checkIfAlreadyPaired(); // Cek apakah sudah paired
 
-    // ✅ Ambil familyCode setelah widget dibangun
+    // ✅ PERBAIKAN: Langsung ambil family code saat init
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      _familyCode = authProvider.user?.familyCode;
-      _initializePusher(); // Pindahkan ke sini agar _familyCode sudah tersedia
+      _initializeFamilyCodeAndPusher();
     });
+  }
+
+  // ✅ Method baru untuk inisialisasi family code & pusher
+  Future<void> _initializeFamilyCodeAndPusher() async {
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+      // Tunggu sampai user data tersedia
+      int retryCount = 0;
+      while (authProvider.user?.familyCode == null && retryCount < 10) {
+        print('⏳ Menunggu family code... (retry: $retryCount)');
+        await Future.delayed(const Duration(milliseconds: 500));
+        retryCount++;
+      }
+
+      if (authProvider.user?.familyCode != null) {
+        setState(() {
+          _familyCode = authProvider.user!.familyCode;
+        });
+        print('✅ Family code loaded: $_familyCode');
+
+        // Inisialisasi Pusher setelah dapat family code
+        await _initializePusher();
+      } else {
+        // Jika masih null setelah retry, tetap stop loading
+        print('⚠️ Family code tidak ditemukan setelah retry');
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+
+        // Optional: Show error message
+        _showErrorSnackBar('Gagal memuat kode keluarga. Silakan coba lagi.');
+      }
+    } catch (e) {
+      print('❌ Error initializing family code: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  // Cek apakah sudah paired
+  Future<void> _checkIfAlreadyPaired() async {
+    final prefs = await SharedPreferences.getInstance();
+    final isDevicePaired = prefs.getBool('isDevicePaired') ?? false;
+
+    print('🔍 FamilyCodeScreen - isDevicePaired: $isDevicePaired');
+
+    if (isDevicePaired && mounted) {
+      print('➡️ Device sudah paired, redirect ke dashboard');
+      Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
+    }
   }
 
   Future<void> _markFamilyCodeAsSeen() async {
@@ -51,6 +106,16 @@ class _FamilyCodeScreenState extends State<FamilyCodeScreen>
       print('✅ FamilyCodeScreen - hasSeenFamilyCode diset true');
     } catch (e) {
       print('❌ Error saving hasSeenFamilyCode: $e');
+    }
+  }
+
+  Future<void> _markDeviceAsPaired() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isDevicePaired', true);
+      print('✅ FamilyCodeScreen - isDevicePaired diset true');
+    } catch (e) {
+      print('❌ Error saving isDevicePaired: $e');
     }
   }
 
@@ -85,7 +150,7 @@ class _FamilyCodeScreenState extends State<FamilyCodeScreen>
     }
   }
 
-  void _handleDevicePaired(PusherEvent event) {
+  void _handleDevicePaired(PusherEvent event) async {
     print('🎯 Device paired event received: ${event.data}');
 
     try {
@@ -105,6 +170,9 @@ class _FamilyCodeScreenState extends State<FamilyCodeScreen>
             duration: const Duration(seconds: 3),
           ),
         );
+
+        // Simpan status pairing sebelum navigasi
+        await _markDeviceAsPaired();
 
         Future.delayed(const Duration(seconds: 2), () {
           if (mounted) {
@@ -143,7 +211,6 @@ class _FamilyCodeScreenState extends State<FamilyCodeScreen>
 
   @override
   void dispose() {
-    // ✅ Jangan pakai Provider.of di sini
     if (_familyCode != null) {
       PusherService.unsubscribeFromFamilyChannel(_familyCode!);
       print('🧹 Unsubscribed from Pusher channel: $_familyCode');
@@ -168,6 +235,21 @@ class _FamilyCodeScreenState extends State<FamilyCodeScreen>
     );
   }
 
+  void _showErrorSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppConstants.defaultRadius),
+        ),
+        duration: const Duration(seconds: 3),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
@@ -178,7 +260,7 @@ class _FamilyCodeScreenState extends State<FamilyCodeScreen>
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: _isLoading
-            ? _buildFullScreenLoading() // ✅ Full screen loading
+            ? _buildFullScreenLoading()
             : FadeTransition(
                 opacity: _fadeAnimation,
                 child: SlideTransition(
@@ -221,7 +303,6 @@ class _FamilyCodeScreenState extends State<FamilyCodeScreen>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // ✅ Animated Icon
           TweenAnimationBuilder<double>(
             tween: Tween(begin: 0.0, end: 1.0),
             duration: const Duration(milliseconds: 1500),
@@ -252,10 +333,7 @@ class _FamilyCodeScreenState extends State<FamilyCodeScreen>
               );
             },
           ),
-
           const SizedBox(height: 40),
-
-          // ✅ Loading Spinner
           SizedBox(
             width: 50,
             height: 50,
@@ -264,10 +342,7 @@ class _FamilyCodeScreenState extends State<FamilyCodeScreen>
               strokeWidth: 4,
             ),
           ),
-
           const SizedBox(height: 32),
-
-          // ✅ Main Text
           Text(
             'Menyiapkan Koneksi',
             style: TextStyle(
@@ -278,10 +353,7 @@ class _FamilyCodeScreenState extends State<FamilyCodeScreen>
             ),
             textAlign: TextAlign.center,
           ),
-
           const SizedBox(height: 12),
-
-          // ✅ Subtitle with animation
           TweenAnimationBuilder<double>(
             tween: Tween(begin: 0.0, end: 1.0),
             duration: const Duration(milliseconds: 800),
@@ -303,10 +375,7 @@ class _FamilyCodeScreenState extends State<FamilyCodeScreen>
               );
             },
           ),
-
           const SizedBox(height: 40),
-
-          // ✅ Loading steps indicator
           _buildLoadingSteps(),
         ],
       ),

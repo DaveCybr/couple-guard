@@ -1,5 +1,4 @@
-import 'package:couple_guard/modules/auth/src/screens/album_camera_screen.dart';
-import 'package:couple_guard/modules/auth/src/screens/camera_screen.dart';
+import 'package:couple_guard/modules/auth/src/screens/album_screen.dart';
 import 'package:couple_guard/modules/auth/src/screens/family_screen.dart';
 import 'package:couple_guard/modules/auth/src/screens/geofence_list_screen.dart';
 import 'package:couple_guard/modules/auth/src/screens/loading_screen.dart';
@@ -16,13 +15,14 @@ import '../models/notification_model.dart';
 import '../services/auth_service.dart';
 import '../services/location_service.dart';
 import '../services/command_service.dart';
+import '../services/fcm_services.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import './realtime_location.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:shared_preferences/shared_preferences.dart'; // Tambahkan ini
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import './album_camera_screen.dart';
+import 'album_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -296,21 +296,147 @@ class _DashboardScreenState extends State<DashboardScreen>
       LocalNotificationService();
   final CommandService commandService = CommandService();
 
-  Future<void> _handleMonitoring(String deviceId, String token) async {
-    print("ditap$deviceId");
-    try {
-      final result = await commandService.startMonitoring(
-        deviceId: deviceId,
-        authToken: token,
-      );
-      print('monitoring requested: ${result['success']}');
-    } catch (e) {
-      print('Error: $e');
+  // Future<void> _handleMonitoring(String deviceId, String token) async {
+  //   print("ditap$deviceId");
+  //   try {
+  //     final result = await commandService.startMonitoring(
+  //       deviceId: deviceId,
+  //       authToken: token,
+  //     );
+  //     print('monitoring requested: ${result['success']}');
+  //   } catch (e) {
+  //     print('Error: $e');
+  //   }
+  // }
+  // ✅ UPDATE METHOD INI DI dashboard_screen.dart
+
+  Future<void> _handleLogout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.logout_rounded,
+                  color: Colors.red,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                "Konfirmasi Logout",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          content: const Text(
+            "Apakah Anda yakin ingin keluar dari akun?",
+            style: TextStyle(fontSize: 15, height: 1.5),
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: Text(
+                "Batal",
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text(
+                "Ya, Keluar",
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm == true) {
+      try {
+        // ✅ Reset logout flags (JANGAN reset hasSeenFamilyCode & hasOnboarded!)
+        await _resetLogoutFlags();
+
+        // Logout dari AuthProvider (clear token, dll)
+        await Provider.of<AuthProvider>(context, listen: false).logout();
+
+        if (context.mounted) {
+          // ✅ Redirect ke LOGIN (bukan register!)
+          Navigator.of(
+            context,
+          ).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
+        }
+      } catch (e) {
+        if (context.mounted) {
+          _showStyledSnackBar(
+            'Gagal logout: $e',
+            Colors.red,
+            Icons.error_outline_rounded,
+          );
+        }
+      }
     }
   }
 
-  Future<void> _handleCapturePhoto(String deviceId, String token) async {
-    print("ditap$deviceId");
+  // ✅ Method untuk reset flags saat logout
+  Future<void> _resetLogoutFlags() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // ✅ Reset flags yang perlu di-reset
+      await prefs.setBool('isLoggedIn', false);
+      await prefs.setBool('isDevicePaired', false);
+
+      // ❌ JANGAN reset ini:
+      // await prefs.setBool('hasSeenFamilyCode', false); // TETAP true!
+      // await prefs.setBool('hasOnboarded', false);      // TETAP true!
+
+      print('✅ Logout - isLoggedIn diset false');
+      print('✅ Logout - isDevicePaired diset false');
+      print('✅ Logout - hasSeenFamilyCode & hasOnboarded TETAP (tidak diubah)');
+    } catch (e) {
+      print('❌ Error resetting logout flags: $e');
+    }
+  }
+
+  Future<void> _handleScreenCapture(String deviceId, String token) async {
+    print("Screen capture: $deviceId");
 
     // Snackbar loading
     ScaffoldMessenger.of(context).showSnackBar(
@@ -326,7 +452,175 @@ class _DashboardScreenState extends State<DashboardScreen>
               ),
             ),
             const SizedBox(width: 12),
-            const Text('Mengambil foto...', style: TextStyle(fontSize: 15)),
+            const Text(
+              'Mengambil screenshot layar...',
+              style: TextStyle(fontSize: 15),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.blue[700],
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.all(16),
+      ),
+    );
+
+    try {
+      final result = await commandService.screenCapture(
+        deviceId: deviceId,
+        authToken: token,
+      );
+
+      print('Screenshot captured: ${result['success']}');
+
+      // Snackbar success
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.screenshot_monitor,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Screenshot berhasil diambil! 📱',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Lihat di menu Album Potretan',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.white.withOpacity(0.9),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green[600],
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error: $e');
+
+      // Snackbar error
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.error_outline,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Gagal mengambil screenshot',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        e.toString(),
+                        style: const TextStyle(fontSize: 13),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red[700],
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
+            action: SnackBarAction(
+              label: 'Coba Lagi',
+              textColor: Colors.white,
+              onPressed: () {
+                _handleScreenCapture(deviceId, token);
+              },
+            ),
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleCapturePhoto(
+    String deviceId,
+    String token, {
+    bool frontCamera = true,
+  }) async {
+    print(
+      "ditap$deviceId - ${frontCamera ? 'Kamera Depan' : 'Kamera Belakang'}",
+    );
+
+    // Snackbar loading
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Mengambil foto ${frontCamera ? 'depan' : 'belakang'}...',
+              style: TextStyle(fontSize: 15),
+            ),
           ],
         ),
         backgroundColor: Colors.blue[700],
@@ -341,6 +635,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       final result = await commandService.capturePhoto(
         deviceId: deviceId,
         authToken: token,
+        frontCamera: frontCamera, // Tambahkan parameter ini
       );
 
       print('Photo captured: ${result['success']}');
@@ -456,7 +751,11 @@ class _DashboardScreenState extends State<DashboardScreen>
               label: 'Coba Lagi',
               textColor: Colors.white,
               onPressed: () {
-                _handleCapturePhoto(deviceId, token);
+                _handleCapturePhoto(
+                  deviceId,
+                  token,
+                  frontCamera: frontCamera,
+                ); // Jangan lupa tambahkan parameter
               },
             ),
           ),
@@ -465,19 +764,19 @@ class _DashboardScreenState extends State<DashboardScreen>
     }
   }
 
-  Future<void> _handleMonitoringScreen(String deviceId, String token) async {
-    print("ditap$deviceId");
+  // Future<void> _handleMonitoringScreen(String deviceId, String token) async {
+  //   print("ditap$deviceId");
 
-    try {
-      final result = await commandService.startScreenMonitor(
-        deviceId: deviceId,
-        authToken: token,
-      );
-      print('Location requested: ${result['success']}');
-    } catch (e) {
-      print('Error: $e');
-    }
-  }
+  //   try {
+  //     final result = await commandService.startScreenMonitor(
+  //       deviceId: deviceId,
+  //       authToken: token,
+  //     );
+  //     print('Location requested: ${result['success']}');
+  //   } catch (e) {
+  //     print('Error: $e');
+  //   }
+  // }
 
   Future<void> _handleRequestLocation(String deviceId, String token) async {
     print("ditap$deviceId");
@@ -776,60 +1075,64 @@ class _DashboardScreenState extends State<DashboardScreen>
     setState(() => _isLoadingDevices = true);
 
     try {
+      debugPrint("🔄 Loading devices for user: ${user!.id}");
+
       final devices = await _authService.getDevicesByParent(
-        parentId: user!.id!,
+        parentId: user.id!,
         token: _authToken!,
       );
+
+      debugPrint("✅ Loaded ${devices.length} devices");
 
       setState(() {
         _devices = devices;
 
         if (devices.isNotEmpty && _selectedDeviceId == null) {
-          // PASTIKAN menggunakan deviceId, bukan id
           _selectedDeviceId = devices.first.deviceId;
-          debugPrint("✅ Selected device: ${_selectedDeviceId}");
+          debugPrint(
+            "✅ Auto-selected device: $_selectedDeviceId (${devices.first.deviceName})",
+          );
           _loadNotifications(_selectedDeviceId!);
+        } else if (devices.isEmpty) {
+          debugPrint("⚠️ No devices found");
         }
       });
 
-      debugPrint("✅ Berhasil load ${devices.length} devices");
-
-      // DEBUG: Print semua device yang loaded
+      // Debug: Print semua device
       for (var device in devices) {
         debugPrint('📱 Device: ${device.deviceName}');
-        debugPrint(
-          '   - deviceId: ${device.deviceId} (${device.deviceId.runtimeType})',
-        );
-        debugPrint('   - id: ${device.id} (${device.id.runtimeType})');
+        debugPrint('   - deviceId: ${device.deviceId}');
         debugPrint('   - isOnline: ${device.isOnline}');
       }
     } catch (e) {
       debugPrint("❌ Error load devices: $e");
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Gagal memuat devices: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal memuat devices: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
       setState(() => _isLoadingDevices = false);
     }
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    if (_authToken == null && authProvider.token != null) {
-      setState(() {
-        _authToken = authProvider.token;
-      });
-      _loadFamilies(); // panggil setelah token ada
-      _loadDevices();
-      // _loadNotifications(_selectedDeviceId!);
-    }
-  }
+  // @override
+  // void didChangeDependencies() {
+  //   super.didChangeDependencies();
+  //   final authProvider = Provider.of<AuthProvider>(context, listen: false);
+  //   if (_authToken == null && authProvider.token != null) {
+  //     setState(() {
+  //       _authToken = authProvider.token;
+  //     });
+  //     _loadFamilies(); // panggil setelah token ada
+  //     _loadDevices();
+  //     // _loadNotifications(_selectedDeviceId!);
+  //   }
+  // }
 
   @override
   void initState() {
@@ -846,23 +1149,99 @@ class _DashboardScreenState extends State<DashboardScreen>
         ).animate(
           CurvedAnimation(parent: _animationController, curve: Curves.easeOut),
         );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initializeDashboardData();
+    });
+  }
+
+  Future<void> _initializeDashboardData() async {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+
+    debugPrint('🔄 Dashboard - Starting initialization...');
+
+    // ✅ Tunggu sampai AuthProvider selesai inisialisasi
+    int initRetryCount = 0;
+    while (!authProvider.isInitialized && initRetryCount < 40) {
+      debugPrint(
+        '⏳ Dashboard - Waiting for AuthProvider init... (${initRetryCount + 1}/40)',
+      );
+      await Future.delayed(const Duration(milliseconds: 250));
+      initRetryCount++;
+    }
+
+    if (!authProvider.isInitialized) {
+      debugPrint('❌ Dashboard - AuthProvider initialization timeout');
+      if (mounted) {
+        _showErrorSnackBar('Failed to initialize. Please restart the app.');
+      }
+      return;
+    }
+
+    debugPrint('✅ Dashboard - AuthProvider initialized');
+
+    // ✅ Tunggu sampai token & user tersedia
+    int dataRetryCount = 0;
+    while ((authProvider.token == null || authProvider.user == null) &&
+        dataRetryCount < 20) {
+      debugPrint(
+        '⏳ Dashboard - Waiting for auth data... (${dataRetryCount + 1}/20)',
+      );
+      await Future.delayed(const Duration(milliseconds: 250));
+      dataRetryCount++;
+    }
+
+    if (authProvider.token != null && authProvider.user != null) {
+      setState(() {
+        _authToken = authProvider.token;
+      });
+
+      print('✅ Auth data ready, loading dashboard data...');
+      print('   - Token: ${_authToken!.substring(0, 20)}...');
+      print('   - User: ${authProvider.user!.email}');
+      print('   - User ID: ${authProvider.user!.id}');
+
+      // Load data
+      await _loadFamilies();
+      await _loadDevices();
+    } else {
+      print('❌ Auth data not available after retry');
+
+      // Fallback: redirect ke login
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Session expired. Please login again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil(AppRoutes.login, (route) => false);
+      }
+    }
   }
 
   Future<void> _loadFamilies() async {
-    debugPrint("🔑 Auth token sekarang: $_authToken");
+    debugPrint("🔑 Auth token: ${_authToken?.substring(0, 20)}...");
+
     if (_authToken == null) {
       debugPrint("❌ Token null, tidak bisa load families");
       return;
     }
 
     setState(() => _isLoading = true);
+
     try {
       final families = await _familyService.getJoinedFamilies(
         authToken: _authToken!,
       );
+
       setState(() {
         _families = families;
       });
+
+      debugPrint("✅ Loaded ${families.length} families");
     } catch (e) {
       debugPrint("❌ Error load families: $e");
     } finally {
@@ -1372,11 +1751,10 @@ class _DashboardScreenState extends State<DashboardScreen>
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (context) =>
-                                          ScreenshotGalleryPage(
-                                            deviceId: _selectedDeviceId!,
-                                            authToken: _authToken!,
-                                          ),
+                                      builder: (context) => AlbumScreen(
+                                        deviceId: _selectedDeviceId!,
+                                        authToken: _authToken!,
+                                      ),
                                     ),
                                   );
                                 },
@@ -1385,15 +1763,15 @@ class _DashboardScreenState extends State<DashboardScreen>
                             const SizedBox(width: 16),
                             Expanded(
                               child: _buildMonitoringButton(
-                                icon: Icons.camera_alt_rounded,
-                                label: 'Potretan\nSekali',
+                                icon: Icons.screenshot_monitor_rounded,
+                                label: 'Screenshot\nLayar',
                                 color: Colors.teal,
                                 gradientColors: [
                                   Colors.teal[400]!,
                                   Colors.teal[600]!,
                                 ],
                                 onTap: () {
-                                  _handleCapturePhoto(
+                                  _handleScreenCapture(
                                     _selectedDeviceId!,
                                     _authToken!,
                                   );
@@ -1408,17 +1786,18 @@ class _DashboardScreenState extends State<DashboardScreen>
                           children: [
                             Expanded(
                               child: _buildMonitoringButton(
-                                icon: Icons.videocam_rounded,
-                                label: 'Kamera\nLive',
+                                icon: Icons.camera_alt_rounded,
+                                label: 'Kamera\nDepan',
                                 color: Colors.purple,
                                 gradientColors: [
                                   Colors.purple[400]!,
                                   Colors.purple[600]!,
                                 ],
                                 onTap: () {
-                                  _handleMonitoring(
+                                  _handleCapturePhoto(
                                     _selectedDeviceId!,
                                     _authToken!,
+                                    frontCamera: true,
                                   );
                                 },
                               ),
@@ -1426,17 +1805,18 @@ class _DashboardScreenState extends State<DashboardScreen>
                             const SizedBox(width: 16),
                             Expanded(
                               child: _buildMonitoringButton(
-                                icon: Icons.screenshot_monitor_rounded,
-                                label: 'Layar\nLive',
+                                icon: Icons.camera_alt_rounded,
+                                label: 'Kamera\nBelakang',
                                 color: Colors.orange,
                                 gradientColors: [
                                   Colors.orange[400]!,
                                   Colors.orange[600]!,
                                 ],
                                 onTap: () {
-                                  _handleMonitoringScreen(
+                                  _handleCapturePhoto(
                                     _selectedDeviceId!,
                                     _authToken!,
+                                    frontCamera: false,
                                   );
                                 },
                               ),
@@ -2159,13 +2539,244 @@ class _DashboardScreenState extends State<DashboardScreen>
             ],
           ),
 
-          const SizedBox(height: 16),
+          // Tombol Dapatkan Token FCM
+          const SizedBox(height: 12),
 
           // Logout Button
           _buildLogoutButton(),
         ],
       ),
     );
+  }
+
+  // Tambahkan method untuk tombol FCM Token
+  Widget _buildFcmTokenButton() {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Colors.blue[400]!, Colors.blue[600]!],
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.withOpacity(0.3),
+            blurRadius: 12,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _handleGetFcmToken,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.notifications_active_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Text(
+                  'Dapatkan Token FCM',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 16,
+                    color: Colors.white,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Tambahkan method untuk handle tombol FCM Token menggunakan FCMService yang sudah ada
+  Future<void> _handleGetFcmToken() async {
+    try {
+      // Show loading indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text('Mendapatkan token FCM...'),
+            ],
+          ),
+          backgroundColor: Colors.blue[600],
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          margin: const EdgeInsets.all(16),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+
+      // Get FCM token dari FCMService yang sudah ada
+      final fcmService = FCMService();
+      String? fcmToken = fcmService.fcmToken;
+
+      // Jika token belum ada, coba initialize ulang
+      if (fcmToken == null) {
+        await fcmService.initialize();
+        fcmToken = fcmService.fcmToken;
+      }
+
+      if (fcmToken == null) {
+        throw Exception(
+          'Gagal mendapatkan token FCM. Pastikan FCM sudah terkonfigurasi dengan benar.',
+        );
+      }
+
+      // Update FCM token ke server
+      if (_authToken != null) {
+        await _authService.updateFcmToken(
+          fcmToken: fcmToken,
+          token: _authToken!,
+        );
+
+        // Show success message
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.check_circle,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Text(
+                          'Token FCM Berhasil Diperbarui!',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Token: ${fcmToken!.substring(0, 20)}...',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.white.withOpacity(0.9),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.green[600],
+              duration: const Duration(seconds: 4),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              margin: const EdgeInsets.all(16),
+            ),
+          );
+        }
+      } else {
+        throw Exception('Token autentikasi tidak tersedia');
+      }
+    } catch (e) {
+      // Show error message
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(
+                    Icons.error_outline,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Gagal Mendapatkan Token FCM',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        e.toString(),
+                        style: const TextStyle(fontSize: 13),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red[700],
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16),
+            action: SnackBarAction(
+              label: 'Coba Lagi',
+              textColor: Colors.white,
+              onPressed: _handleGetFcmToken,
+            ),
+          ),
+        );
+      }
+    }
   }
 
   Widget _buildSettingItem({
@@ -2368,106 +2979,6 @@ class _DashboardScreenState extends State<DashboardScreen>
         if (context.mounted) {
           _showStyledSnackBar(
             'Gagal memuat kode: ${e.toString().replaceAll('Exception:', '').trim()}',
-            Colors.red,
-            Icons.error_outline_rounded,
-          );
-        }
-      }
-    }
-  }
-
-  Future<void> _handleLogout() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.logout_rounded,
-                  color: Colors.red,
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                "Konfirmasi Logout",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-          content: const Text(
-            "Apakah Anda yakin ingin keluar dari akun?",
-            style: TextStyle(fontSize: 15, height: 1.5),
-          ),
-          actionsPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              child: Text(
-                "Batal",
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 24,
-                  vertical: 12,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text(
-                "Ya, Keluar",
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirm == true) {
-      try {
-        await _resetFamilyCodeStatus();
-        await Provider.of<AuthProvider>(context, listen: false).logout();
-
-        if (context.mounted) {
-          Navigator.of(
-            context,
-          ).pushNamedAndRemoveUntil(AppRoutes.register, (route) => false);
-        }
-      } catch (e) {
-        if (context.mounted) {
-          _showStyledSnackBar(
-            'Gagal logout: $e',
             Colors.red,
             Icons.error_outline_rounded,
           );

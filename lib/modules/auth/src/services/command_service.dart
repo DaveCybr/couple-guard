@@ -48,6 +48,24 @@ class CommandService {
     }
   }
 
+  Future<Map<String, dynamic>> screenCapture({
+    required String deviceId,
+    required String authToken,
+  }) async {
+    try {
+      final headers = await _getHeaders(authToken);
+      final response = await http.post(
+        Uri.parse('$_baseUrl/commands/screen-capture'),
+        headers: headers,
+        body: json.encode({'device_id': deviceId}),
+      );
+
+      return _handleResponse(response);
+    } catch (e) {
+      throw Exception('Failed to capture photo: $e');
+    }
+  }
+
   /// Send request location command
   ///
   /// [deviceId] - Target device ID
@@ -200,7 +218,10 @@ class CommandService {
   /// Test FCM token validity
   ///
   /// [deviceId] - Target device ID
-  Future<Map<String, dynamic>> testFcmToken({required String deviceId, required String authToken}) async {
+  Future<Map<String, dynamic>> testFcmToken({
+    required String deviceId,
+    required String authToken,
+  }) async {
     try {
       final headers = await _getHeaders(authToken);
       final response = await http.post(

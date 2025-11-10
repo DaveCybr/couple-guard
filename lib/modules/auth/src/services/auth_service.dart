@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:couple_guard/core/configs/api_config.dart';
 import 'package:http/http.dart' as http;
 import '../models/user_model.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class AuthService {
   final String _baseUrl = ApiConfig.baseUrl;
@@ -40,6 +41,7 @@ class AuthService {
       },
       body: jsonEncode({"email": email, "password": password}),
     );
+    print('🔍 REGISTER RESPONSE: ${response.body}');
 
     if (response.statusCode == 201) {
       final responseData = jsonDecode(response.body);
@@ -47,7 +49,26 @@ class AuthService {
       final parent = responseData['data']['parent'];
       final token = responseData['data']['token'];
 
-      return UserModel.fromJson({...parent, "token": token});
+      final user = UserModel.fromJson({...parent, "token": token});
+
+      // Otomatis update FCM token dari FCMService
+      try {
+        // Import firebase_messaging di file ini
+        final fcmToken = await FirebaseMessaging.instance.getToken();
+
+        if (fcmToken != null && fcmToken.isNotEmpty) {
+          print('📤 Updating FCM token after register: $fcmToken');
+          await updateFcmToken(fcmToken: fcmToken, token: token);
+          print('✅ FCM token berhasil diupdate setelah register');
+        } else {
+          print('⚠️ FCM token tidak tersedia');
+        }
+      } catch (e) {
+        print('⚠️ Gagal update FCM token setelah register: $e');
+        // Tidak throw error agar registrasi tetap berhasil
+      }
+
+      return user;
     } else {
       throw Exception("Register gagal: ${response.body}");
     }
@@ -62,7 +83,7 @@ class AuthService {
         'Authorization': 'Bearer $token',
       },
     );
-
+    print('🔍 CURRENT USER RESPONSE: ${response.body}');
     if (response.statusCode == 200) {
       final responseData = jsonDecode(response.body);
       return UserModel.fromJson(responseData['data']);
@@ -85,6 +106,38 @@ class AuthService {
 
     if (response.statusCode != 200) {
       throw Exception("Logout gagal: ${response.body}");
+    }
+  }
+
+  Future<void> updateFcmToken({
+    required String fcmToken,
+    required String token,
+  }) async {
+    final response = await http.post(
+      Uri.parse("$_baseUrl/auth/update-fcm-token"),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({"fcm_token": fcmToken}),
+    );
+
+    print('📡 UPDATE FCM RESPONSE: ${response.statusCode} - ${response.body}');
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      if (data['success'] == true) {
+        print('✅ FCM token updated successfully');
+      } else {
+        throw Exception("Update gagal: ${data['message'] ?? 'Unknown error'}");
+      }
+    } else if (response.statusCode == 401) {
+      throw Exception("Unauthorized: Token tidak valid atau kadaluarsa");
+    } else {
+      throw Exception(
+        "Gagal update FCM token: ${response.statusCode} ${response.body}",
+      );
     }
   }
 

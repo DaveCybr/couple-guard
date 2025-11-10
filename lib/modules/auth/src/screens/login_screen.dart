@@ -1,12 +1,13 @@
-// lib/modules/auth/src/screens/login_screen.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/routes/app_navigator.dart';
 import '../../../../core/routes/app_routes.dart';
 import '../providers/auth_provider.dart';
 import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_strings.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../services/check_device_service.dart'; // ✅ Import service
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -47,12 +48,10 @@ class _LoginScreenState extends State<LoginScreen>
       vsync: this,
     );
 
-    _slideAnimation = Tween<Offset>(
-      begin: const Offset(0, 0.3),
-      end: Offset.zero,
-    ).animate(
-      CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic),
-    );
+    _slideAnimation =
+        Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero).animate(
+          CurvedAnimation(parent: _slideController, curve: Curves.easeOutCubic),
+        );
 
     _fadeAnimation = Tween<double>(
       begin: 0.0,
@@ -81,21 +80,120 @@ class _LoginScreenState extends State<LoginScreen>
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-    final success = await authProvider.login(
-      _emailController.text.trim(),
-      _passwordController.text,
-    );
+    try {
+      final success = await authProvider.login(
+        _emailController.text.trim(),
+        _passwordController.text,
+      );
 
-    if (!mounted) return;
+      if (!mounted) return;
 
-    if (success) {
-      AppNavigator.pushReplacement(AppRoutes.dashboard);
-    } else {
-      _showErrorSnackBar("Login failed, please check your credentials.");
+      if (success) {
+        // ✅ Login berhasil, simpan status isLoggedIn
+        await _setLoggedInStatus(true);
+
+        // ✅ Cek apakah user sudah memiliki device yang terhubung
+        await _checkAndNavigateBasedOnDevice(authProvider);
+      } else {
+        _showErrorSnackBar("Login failed, please check your credentials.");
+      }
+    } catch (e) {
+      if (!mounted) return;
+      _showErrorSnackBar("Login error: ${e.toString()}");
+    }
+  }
+
+  // ✅ Method untuk set status login
+  Future<void> _setLoggedInStatus(bool status) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isLoggedIn', status);
+      print('✅ LoginScreen - isLoggedIn diset $status');
+    } catch (e) {
+      print('❌ Error saving isLoggedIn: $e');
+    }
+  }
+
+  // ✅ Method untuk cek device dan navigasi
+  Future<void> _checkAndNavigateBasedOnDevice(AuthProvider authProvider) async {
+    try {
+      final user = authProvider.user;
+      final token = authProvider.token;
+
+      if (user?.id == null || token == null) {
+        _showErrorSnackBar('User data tidak lengkap');
+        return;
+      }
+
+      // Show loading
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+            ),
+          ),
+        );
+      }
+
+      print('🔍 Checking connected devices for user: ${user!.id}');
+
+      // ✅ Panggil API check device
+      final result = await CheckPairedDeviceService.checkConnectedDevices(
+        user.id!,
+        token,
+      );
+
+      // Close loading
+      if (mounted) Navigator.pop(context);
+
+      if (!mounted) return;
+
+      print('📱 Has Connected Device: ${result['hasConnectedDevice']}');
+      print('📱 Device Count: ${result['deviceCount']}');
+
+      if (result['hasConnectedDevice'] == true) {
+        // ✅ Ada device terhubung → Set status paired & ke Dashboard
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('isDevicePaired', true);
+        print('✅ Device paired status set to true');
+
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil(AppRoutes.dashboard, (route) => false);
+      } else {
+        // ❌ Tidak ada device → Ke Family Code untuk pairing
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setBool('isDevicePaired', false);
+        print('⚠️ No device paired, redirecting to Family Code');
+
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil(AppRoutes.familyCode, (route) => false);
+      }
+    } catch (e) {
+      // Close loading if still open
+      if (mounted && Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+
+      print('❌ Error checking device: $e');
+
+      if (mounted) {
+        _showErrorSnackBar('Gagal memeriksa device: ${e.toString()}');
+
+        // Fallback ke family code jika error
+        Navigator.of(
+          context,
+        ).pushNamedAndRemoveUntil(AppRoutes.familyCode, (route) => false);
+      }
     }
   }
 
   void _showErrorSnackBar(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -331,25 +429,21 @@ class _LoginScreenState extends State<LoginScreen>
               ),
               elevation: 2,
             ),
-            child:
-                authProvider.isLoading
-                    ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          AppColors.white,
-                        ),
-                      ),
-                    )
-                    : const Text(
-                      AppStrings.login,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+            child: authProvider.isLoading
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        AppColors.white,
                       ),
                     ),
+                  )
+                : const Text(
+                    AppStrings.login,
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
           ),
         );
       },
@@ -369,7 +463,7 @@ class _LoginScreenState extends State<LoginScreen>
         const SizedBox(width: 4),
         TextButton(
           onPressed: () {
-            Navigator.of(context).pushNamed('/auth/register');
+            Navigator.of(context).pushNamed(AppRoutes.register);
           },
           child: const Text(
             AppStrings.signUp,

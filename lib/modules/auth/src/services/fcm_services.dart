@@ -5,6 +5,8 @@ import 'package:permission_handler/permission_handler.dart';
 import '../services/local_notification_service.dart';
 import '../../../../core/routes/app_navigator.dart';
 import '../../../../core/routes/app_routes.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../services/auth_service.dart';
 
 // ← PENTING: Background handler harus top-level function
 @pragma('vm:entry-point')
@@ -19,7 +21,9 @@ class FCMService {
   FCMService._internal();
 
   final FirebaseMessaging _fcm = FirebaseMessaging.instance;
-  final LocalNotificationService _localNotificationService = LocalNotificationService();
+  final LocalNotificationService _localNotificationService =
+      LocalNotificationService();
+  final AuthService _authService = AuthService();
 
   String? _fcmToken;
   String? get fcmToken => _fcmToken;
@@ -71,19 +75,20 @@ class FCMService {
   Future<void> _getFCMToken() async {
     try {
       _fcmToken = await _fcm.getToken();
-      
+
       if (_fcmToken != null) {
         print('🔑 FCM Token: $_fcmToken');
-        
-        // TODO: Send token to backend
-        await _sendTokenToBackend(_fcmToken!);
+
+        // Auto send token to backend if user is logged in
+        await _sendTokenToBackend();
       }
 
       // Listen for token refresh
       _fcm.onTokenRefresh.listen((newToken) {
         _fcmToken = newToken;
         print('🔄 FCM Token refreshed: $newToken');
-        _sendTokenToBackend(newToken);
+        // Auto send refreshed token to backend
+        _sendTokenToBackend();
       });
     } catch (e) {
       print('❌ Error getting FCM token: $e');
@@ -91,16 +96,43 @@ class FCMService {
   }
 
   /// Send token to backend
-  Future<void> _sendTokenToBackend(String token) async {
+  Future<void> _sendTokenToBackend() async {
+    if (_fcmToken == null) {
+      print('⚠️ No FCM token to send');
+      return;
+    }
+
     try {
-      // TODO: Implement API call to send token
-      // Example:
-      // final authService = AuthService();
-      // await authService.updateFCMToken(token);
-      
-      print('📤 Sending FCM token to backend: $token');
+      // Get auth token from SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      final authToken = prefs.getString('auth_token');
+
+      if (authToken == null) {
+        print('⚠️ User not logged in, FCM token will be sent after login');
+        return;
+      }
+
+      print('📤 Sending FCM token to backend...');
+      await _authService.updateFcmToken(fcmToken: _fcmToken!, token: authToken);
+      print('✅ FCM token sent to backend successfully');
     } catch (e) {
-      print('❌ Error sending token to backend: $e');
+      print('❌ Error sending FCM token to backend: $e');
+    }
+  }
+
+  /// BARU: Method untuk update FCM token setelah login/register
+  Future<void> updateTokenAfterAuth(String authToken) async {
+    if (_fcmToken == null) {
+      print('⚠️ FCM token not available yet');
+      return;
+    }
+
+    try {
+      print('📤 Updating FCM token after authentication...');
+      await _authService.updateFcmToken(fcmToken: _fcmToken!, token: authToken);
+      print('✅ FCM token updated after authentication');
+    } catch (e) {
+      print('❌ Error updating FCM token after auth: $e');
     }
   }
 
@@ -153,11 +185,11 @@ class FCMService {
     print('📍 Navigating to geofence detail: $data');
 
     final type = data['type'];
-    
+
     if (type == 'GEOFENCE_VIOLATION') {
       // Navigate ke halaman detail geofence
       AppNavigator.navigatorKey.currentState?.pushNamed(
-        AppRoutes.geofenceDetail, // ← Sesuaikan dengan route Anda
+        AppRoutes.geofenceDetail,
         arguments: {
           'device_id': data['device_id'],
           'device_name': data['device_name'],
