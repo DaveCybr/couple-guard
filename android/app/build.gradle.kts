@@ -5,6 +5,16 @@ plugins {
     id("com.google.gms.google-services")
 }
 
+import java.util.Properties
+import java.io.FileInputStream
+
+// 🔹 Membaca key.properties
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
+
 android {
     namespace = "com.example.couple_guard_child"
     compileSdk = 36
@@ -28,10 +38,24 @@ android {
         versionName = flutter.versionName
     }
 
+    // 🔹 Tambahkan konfigurasi signing
+    signingConfigs {
+        create("release") {
+            keyAlias = keystoreProperties["keyAlias"] as String?
+            keyPassword = keystoreProperties["keyPassword"] as String?
+            storeFile = file(keystoreProperties["storeFile"] as String)
+            storePassword = keystoreProperties["storePassword"] as String?
+        }
+    }
+
     buildTypes {
-        release {
+        getByName("release") {
             isMinifyEnabled = false
             isShrinkResources = false
+            // 🔹 Gunakan keystore release, bukan debug
+            signingConfig = signingConfigs.getByName("release")
+        }
+        getByName("debug") {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -42,6 +66,6 @@ flutter {
 }
 
 dependencies {
-    // ✅ Tambahkan ini
+    // ✅ Pastikan ini tetap ada
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

@@ -1666,170 +1666,170 @@ class _DashboardScreenState extends State<DashboardScreen>
           ),
           const SizedBox(height: 16),
 
-          Container(
-            margin: const EdgeInsets.only(bottom: 16),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Colors.purple[50]!, Colors.white],
-              ),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.purple.withOpacity(0.15),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
-                  spreadRadius: 0,
-                ),
-              ],
-              border: Border.all(
-                color: Colors.purple.withOpacity(0.1),
-                width: 1,
-              ),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header dengan gradient
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Colors.purple[400]!, Colors.purple[600]!],
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: const Icon(
-                            Icons.photo_library_rounded,
-                            color: Colors.white,
-                            size: 24,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const Text(
-                          'Monitoring Visual',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+          // Container(
+          //   margin: const EdgeInsets.only(bottom: 16),
+          //   decoration: BoxDecoration(
+          //     gradient: LinearGradient(
+          //       begin: Alignment.topLeft,
+          //       end: Alignment.bottomRight,
+          //       colors: [Colors.purple[50]!, Colors.white],
+          //     ),
+          //     borderRadius: BorderRadius.circular(24),
+          //     boxShadow: [
+          //       BoxShadow(
+          //         color: Colors.purple.withOpacity(0.15),
+          //         blurRadius: 20,
+          //         offset: const Offset(0, 8),
+          //         spreadRadius: 0,
+          //       ),
+          //     ],
+          //     border: Border.all(
+          //       color: Colors.purple.withOpacity(0.1),
+          //       width: 1,
+          //     ),
+          //   ),
+          //   child: ClipRRect(
+          //     borderRadius: BorderRadius.circular(24),
+          //     child: Column(
+          //       crossAxisAlignment: CrossAxisAlignment.start,
+          //       children: [
+          //         // Header dengan gradient
+          //         Container(
+          //           width: double.infinity,
+          //           padding: const EdgeInsets.all(20),
+          //           decoration: BoxDecoration(
+          //             gradient: LinearGradient(
+          //               colors: [Colors.purple[400]!, Colors.purple[600]!],
+          //             ),
+          //           ),
+          //           child: Row(
+          //             children: [
+          //               Container(
+          //                 padding: const EdgeInsets.all(10),
+          //                 decoration: BoxDecoration(
+          //                   color: Colors.white.withOpacity(0.2),
+          //                   borderRadius: BorderRadius.circular(12),
+          //                 ),
+          //                 child: const Icon(
+          //                   Icons.photo_library_rounded,
+          //                   color: Colors.white,
+          //                   size: 24,
+          //                 ),
+          //               ),
+          //               const SizedBox(width: 12),
+          //               const Text(
+          //                 'Monitoring Visual',
+          //                 style: TextStyle(
+          //                   fontSize: 20,
+          //                   fontWeight: FontWeight.bold,
+          //                   color: Colors.white,
+          //                   letterSpacing: 0.5,
+          //                 ),
+          //               ),
+          //             ],
+          //           ),
+          //         ),
 
-                  // Content - Grid 2x2
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      children: [
-                        // Baris pertama (2 menu atas)
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildMonitoringButton(
-                                icon: Icons.photo_album_rounded,
-                                label: 'Album\nPotretan',
-                                color: Colors.blue,
-                                gradientColors: [
-                                  Colors.blue[400]!,
-                                  Colors.blue[600]!,
-                                ],
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => AlbumScreen(
-                                        deviceId: _selectedDeviceId!,
-                                        authToken: _authToken!,
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: _buildMonitoringButton(
-                                icon: Icons.screenshot_monitor_rounded,
-                                label: 'Screenshot\nLayar',
-                                color: Colors.teal,
-                                gradientColors: [
-                                  Colors.teal[400]!,
-                                  Colors.teal[600]!,
-                                ],
-                                onTap: () {
-                                  _handleScreenCapture(
-                                    _selectedDeviceId!,
-                                    _authToken!,
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        // Baris kedua (2 menu bawah)
-                        Row(
-                          children: [
-                            Expanded(
-                              child: _buildMonitoringButton(
-                                icon: Icons.camera_alt_rounded,
-                                label: 'Kamera\nDepan',
-                                color: Colors.purple,
-                                gradientColors: [
-                                  Colors.purple[400]!,
-                                  Colors.purple[600]!,
-                                ],
-                                onTap: () {
-                                  _handleCapturePhoto(
-                                    _selectedDeviceId!,
-                                    _authToken!,
-                                    frontCamera: true,
-                                  );
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: _buildMonitoringButton(
-                                icon: Icons.camera_alt_rounded,
-                                label: 'Kamera\nBelakang',
-                                color: Colors.orange,
-                                gradientColors: [
-                                  Colors.orange[400]!,
-                                  Colors.orange[600]!,
-                                ],
-                                onTap: () {
-                                  _handleCapturePhoto(
-                                    _selectedDeviceId!,
-                                    _authToken!,
-                                    frontCamera: false,
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          //         // Content - Grid 2x2
+          //         Padding(
+          //           padding: const EdgeInsets.all(20),
+          //           child: Column(
+          //             children: [
+          //               // Baris pertama (2 menu atas)
+          //               Row(
+          //                 children: [
+          //                   Expanded(
+          //                     child: _buildMonitoringButton(
+          //                       icon: Icons.photo_album_rounded,
+          //                       label: 'Album\nPotretan',
+          //                       color: Colors.blue,
+          //                       gradientColors: [
+          //                         Colors.blue[400]!,
+          //                         Colors.blue[600]!,
+          //                       ],
+          //                       onTap: () {
+          //                         Navigator.push(
+          //                           context,
+          //                           MaterialPageRoute(
+          //                             builder: (context) => AlbumScreen(
+          //                               deviceId: _selectedDeviceId!,
+          //                               authToken: _authToken!,
+          //                             ),
+          //                           ),
+          //                         );
+          //                       },
+          //                     ),
+          //                   ),
+          //                   const SizedBox(width: 16),
+          //                   Expanded(
+          //                     child: _buildMonitoringButton(
+          //                       icon: Icons.screenshot_monitor_rounded,
+          //                       label: 'Screenshot\nLayar',
+          //                       color: Colors.teal,
+          //                       gradientColors: [
+          //                         Colors.teal[400]!,
+          //                         Colors.teal[600]!,
+          //                       ],
+          //                       onTap: () {
+          //                         _handleScreenCapture(
+          //                           _selectedDeviceId!,
+          //                           _authToken!,
+          //                         );
+          //                       },
+          //                     ),
+          //                   ),
+          //                 ],
+          //               ),
+          //               const SizedBox(height: 16),
+          //               // Baris kedua (2 menu bawah)
+          //               Row(
+          //                 children: [
+          //                   Expanded(
+          //                     child: _buildMonitoringButton(
+          //                       icon: Icons.camera_alt_rounded,
+          //                       label: 'Kamera\nDepan',
+          //                       color: Colors.purple,
+          //                       gradientColors: [
+          //                         Colors.purple[400]!,
+          //                         Colors.purple[600]!,
+          //                       ],
+          //                       onTap: () {
+          //                         _handleCapturePhoto(
+          //                           _selectedDeviceId!,
+          //                           _authToken!,
+          //                           frontCamera: true,
+          //                         );
+          //                       },
+          //                     ),
+          //                   ),
+          //                   const SizedBox(width: 16),
+          //                   Expanded(
+          //                     child: _buildMonitoringButton(
+          //                       icon: Icons.camera_alt_rounded,
+          //                       label: 'Kamera\nBelakang',
+          //                       color: Colors.orange,
+          //                       gradientColors: [
+          //                         Colors.orange[400]!,
+          //                         Colors.orange[600]!,
+          //                       ],
+          //                       onTap: () {
+          //                         _handleCapturePhoto(
+          //                           _selectedDeviceId!,
+          //                           _authToken!,
+          //                           frontCamera: false,
+          //                         );
+          //                       },
+          //                     ),
+          //                   ),
+          //                 ],
+          //               ),
+          //             ],
+          //           ),
+          //         ),
+          //       ],
+          //     ),
+          //   ),
+          // ),
 
           // Helper Widget untuk tombol monitoring
         ],

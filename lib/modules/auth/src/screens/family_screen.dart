@@ -10,6 +10,7 @@ import '../../../../core/constants/app_colors.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/routes/app_routes.dart';
 import '../../src/services/pair_service.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class FamilyCodeScreen extends StatefulWidget {
   const FamilyCodeScreen({Key? key}) : super(key: key);
@@ -35,46 +36,72 @@ class _FamilyCodeScreenState extends State<FamilyCodeScreen>
     super.initState();
     _initAnimations();
     _markFamilyCodeAsSeen();
-    _checkIfAlreadyPaired(); // Cek apakah sudah paired
+    _checkIfAlreadyPaired();
 
-    // ✅ PERBAIKAN: Langsung ambil family code saat init
+    // GANTI dari _initializeFamilyCodeAndPusher ke:
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _initializeFamilyCodeAndPusher();
+      _initializeFamilyCodeAndFCM(); // ← GANTI INI
     });
   }
 
   // ✅ Method baru untuk inisialisasi family code & pusher
-  Future<void> _initializeFamilyCodeAndPusher() async {
+  Future<void> _initializeFamilyCodeAndFCM() async {
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
 
-      // Tunggu sampai user data tersedia
+      // ✅ Tunggu sampai AuthProvider selesai inisialisasi
       int retryCount = 0;
-      while (authProvider.user?.familyCode == null && retryCount < 10) {
-        print('⏳ Menunggu family code... (retry: $retryCount)');
+      while (!authProvider.isInitialized && retryCount < 20) {
+        print('⏳ Menunggu AuthProvider initialization... (retry: $retryCount)');
         await Future.delayed(const Duration(milliseconds: 500));
         retryCount++;
       }
 
-      if (authProvider.user?.familyCode != null) {
-        setState(() {
-          _familyCode = authProvider.user!.familyCode;
-        });
-        print('✅ Family code loaded: $_familyCode');
-
-        // Inisialisasi Pusher setelah dapat family code
-        await _initializePusher();
-      } else {
-        // Jika masih null setelah retry, tetap stop loading
-        print('⚠️ Family code tidak ditemukan setelah retry');
+      if (!authProvider.isInitialized) {
+        print(
+          '❌ AuthProvider tidak berhasil diinisialisasi setelah ${retryCount} retry',
+        );
         if (mounted) {
           setState(() {
             _isLoading = false;
           });
         }
+        _showErrorSnackBar(
+          'Gagal menginisialisasi aplikasi. Silakan coba lagi.',
+        );
+        return;
+      }
 
-        // Optional: Show error message
-        _showErrorSnackBar('Gagal memuat kode keluarga. Silakan coba lagi.');
+      print('✅ AuthProvider sudah initialized');
+
+      // ✅ Cek apakah user authenticated dan ada family code
+      if (authProvider.isAuthenticated &&
+          authProvider.user?.familyCode != null) {
+        setState(() {
+          _familyCode = authProvider.user!.familyCode;
+        });
+        print('✅ Family code loaded: $_familyCode');
+
+        // Setup FCM listener untuk device pairing
+        _setupFCMListener();
+
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+      } else {
+        print('⚠️ User tidak authenticated atau family code tidak ada');
+        print('   - isAuthenticated: ${authProvider.isAuthenticated}');
+        print('   - user: ${authProvider.user}');
+        print('   - familyCode: ${authProvider.user?.familyCode}');
+
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+          });
+        }
+        _showErrorSnackBar('Gagal memuat kode keluarga. Silakan login ulang.');
       }
     } catch (e) {
       print('❌ Error initializing family code: $e');
@@ -83,6 +110,7 @@ class _FamilyCodeScreenState extends State<FamilyCodeScreen>
           _isLoading = false;
         });
       }
+      _showErrorSnackBar('Terjadi kesalahan. Silakan coba lagi.');
     }
   }
 
@@ -119,42 +147,32 @@ class _FamilyCodeScreenState extends State<FamilyCodeScreen>
     }
   }
 
-  Future<void> _initializePusher() async {
-    try {
-      await PusherService.initialize();
-      await Future.delayed(const Duration(seconds: 1));
+  void _setupFCMListener() {
+    print('🔔 Setting up FCM listener for device pairing');
 
-      if (_familyCode != null && _familyCode!.isNotEmpty) {
-        print('🚀 Subscribing to Pusher channel for family: $_familyCode');
+    // Listen for foreground messages
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      print('📱 FCM message received: ${message.data}');
 
-        await PusherService.subscribeToFamilyChannel(
-          _familyCode!,
-          _handleDevicePaired,
-        );
-      } else {
-        print('❌ Family code is null or empty');
+      if (message.data['type'] == 'DEVICE_PAIRED') {
+        _handleDevicePaired(message.data);
       }
+    });
 
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
+    // Listen for background messages that opened the app
+    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+      print('📱 FCM message opened app: ${message.data}');
+
+      if (message.data['type'] == 'DEVICE_PAIRED') {
+        _handleDevicePaired(message.data);
       }
-    } catch (e) {
-      print('❌ Error initializing Pusher: $e');
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
-    }
+    });
   }
 
-  void _handleDevicePaired(PusherEvent event) async {
-    print('🎯 Device paired event received: ${event.data}');
+  void _handleDevicePaired(Map<String, dynamic> data) async {
+    print('🎯 Device paired event received: $data');
 
     try {
-      final Map<String, dynamic> data = json.decode(event.data!);
       final deviceName = data['device_name'] ?? 'Unknown Device';
 
       if (mounted) {
@@ -211,10 +229,10 @@ class _FamilyCodeScreenState extends State<FamilyCodeScreen>
 
   @override
   void dispose() {
-    if (_familyCode != null) {
-      PusherService.unsubscribeFromFamilyChannel(_familyCode!);
-      print('🧹 Unsubscribed from Pusher channel: $_familyCode');
-    }
+    // if (_familyCode != null) {
+    //   PusherService.unsubscribeFromFamilyChannel(_familyCode!);
+    //   print('🧹 Unsubscribed from Pusher channel: $_familyCode');
+    // }
 
     _animationController.dispose();
     super.dispose();
@@ -400,14 +418,14 @@ class _FamilyCodeScreenState extends State<FamilyCodeScreen>
       child: Column(
         children: [
           _buildLoadingStep(
-            icon: Icons.link,
-            text: 'Menginisialisasi Pusher',
+            icon: Icons.notifications,
+            text: 'Menginisialisasi FCM', // ← GANTI dari Pusher
             isActive: true,
           ),
           const SizedBox(height: 12),
           _buildLoadingStep(
             icon: Icons.wifi,
-            text: 'Menghubungkan ke channel',
+            text: 'Menunggu notifikasi pairing', // ← UPDATE text
             isActive: true,
           ),
           const SizedBox(height: 12),

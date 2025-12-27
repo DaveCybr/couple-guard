@@ -3,14 +3,13 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/constants/app_colors.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class GeofenceDetailScreen extends StatefulWidget {
   final Map<String, dynamic> arguments;
 
-  const GeofenceDetailScreen({
-    Key? key,
-    required this.arguments,
-  }) : super(key: key);
+  const GeofenceDetailScreen({Key? key, required this.arguments})
+    : super(key: key);
 
   @override
   State<GeofenceDetailScreen> createState() => _GeofenceDetailScreenState();
@@ -36,15 +35,22 @@ class _GeofenceDetailScreenState extends State<GeofenceDetailScreen> {
 
   void _parseArguments() {
     deviceId = widget.arguments['device_id']?.toString() ?? '';
-    deviceName = widget.arguments['device_name']?.toString() ?? 'Unknown Device';
+    deviceName =
+        widget.arguments['device_name']?.toString() ?? 'Unknown Device';
     geofenceId = widget.arguments['geofence_id']?.toString() ?? '';
-    geofenceName = widget.arguments['geofence_name']?.toString() ?? 'Unknown Location';
-    
+    geofenceName =
+        widget.arguments['geofence_name']?.toString() ?? 'Unknown Location';
+
     // Parse latitude & longitude
-    latitude = double.tryParse(widget.arguments['latitude']?.toString() ?? '0') ?? 0.0;
-    longitude = double.tryParse(widget.arguments['longitude']?.toString() ?? '0') ?? 0.0;
-    
-    timestamp = widget.arguments['timestamp']?.toString() ?? DateTime.now().toIso8601String();
+    latitude =
+        double.tryParse(widget.arguments['latitude']?.toString() ?? '0') ?? 0.0;
+    longitude =
+        double.tryParse(widget.arguments['longitude']?.toString() ?? '0') ??
+        0.0;
+
+    timestamp =
+        widget.arguments['timestamp']?.toString() ??
+        DateTime.now().toIso8601String();
   }
 
   String _formatTimestamp(String timestamp) {
@@ -91,10 +97,7 @@ class _GeofenceDetailScreenState extends State<GeofenceDetailScreen> {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [
-                    Colors.red.shade50,
-                    Colors.white,
-                  ],
+                  colors: [Colors.red.shade50, Colors.white],
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                 ),
@@ -126,10 +129,7 @@ class _GeofenceDetailScreenState extends State<GeofenceDetailScreen> {
                   const SizedBox(height: 8),
                   Text(
                     _formatTimestamp(timestamp),
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Colors.grey.shade600,
-                    ),
+                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
                   ),
                 ],
               ),
@@ -324,7 +324,8 @@ class _GeofenceDetailScreenState extends State<GeofenceDetailScreen> {
                   ),
                   children: [
                     TileLayer(
-                      urlTemplate: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      urlTemplate:
+                          'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
                       subdomains: const ['a', 'b', 'c'],
                     ),
                     MarkerLayer(
@@ -449,10 +450,7 @@ class _GeofenceDetailScreenState extends State<GeofenceDetailScreen> {
         children: [
           Text(
             label,
-            style: TextStyle(
-              fontSize: 11,
-              color: Colors.grey.shade600,
-            ),
+            style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
           ),
           const SizedBox(height: 4),
           Text(
@@ -469,26 +467,12 @@ class _GeofenceDetailScreenState extends State<GeofenceDetailScreen> {
     );
   }
 
-  void _openInMaps() {
-    // TODO: Implement launch maps with coordinates
-    // You can use url_launcher package
-    // Example: https://www.google.com/maps/search/?api=1&query=$latitude,$longitude
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Info'),
-        content: Text(
-          'Koordinat:\nLat: ${latitude.toStringAsFixed(6)}\nLng: ${longitude.toStringAsFixed(6)}',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
+  void _openInMaps() async {
+    final url =
+        'https://www.google.com/maps/search/?api=1&query=$latitude,$longitude';
+    if (await canLaunchUrl(Uri.parse(url))) {
+      await launchUrl(Uri.parse(url));
+    }
   }
 
   @override

@@ -4,31 +4,57 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:couple_guard/core/configs/api_config.dart';
 
 class CommandService {
-  final String _baseUrl = ApiConfig.baseUrl; // ganti sesuai URL backend
+  final String _baseUrl = ApiConfig.baseUrl;
 
   // Build headers with auth token
   Future<Map<String, String>> _getHeaders(String token) async {
     return {
+      'Authorization': 'Bearer $token',
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      'Authorization': 'Bearer $token',
     };
   }
 
-  // Handle API response
+  // Handle API response with better error handling
   Map<String, dynamic> _handleResponse(http.Response response) {
+    // Log response for debugging
+    print('Response Status: ${response.statusCode}');
+    print('Response Headers: ${response.headers}');
+    print('Response Body: ${response.body}');
+
+    // Check if response is HTML (redirect or error page)
+    if (response.body.trim().startsWith('<!DOCTYPE') ||
+        response.body.trim().startsWith('<html')) {
+      throw Exception(
+        'Server returned HTML instead of JSON. '
+        'Status: ${response.statusCode}. '
+        'This might indicate wrong URL or server redirect. '
+        'Check your base URL: $_baseUrl',
+      );
+    }
+
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      return json.decode(response.body);
+      try {
+        return json.decode(response.body);
+      } catch (e) {
+        throw Exception('Failed to parse JSON response: $e');
+      }
     } else {
-      final error = json.decode(response.body);
-      throw Exception(error['message'] ?? 'Request failed');
+      try {
+        final error = json.decode(response.body);
+        throw Exception(
+          error['message'] ??
+              'Request failed with status ${response.statusCode}',
+        );
+      } catch (e) {
+        throw Exception(
+          'Request failed with status ${response.statusCode}: ${response.body}',
+        );
+      }
     }
   }
 
   /// Send capture photo command
-  ///
-  /// [deviceId] - Target device ID
-  /// [frontCamera] - Use front camera (default: true)
   Future<Map<String, dynamic>> capturePhoto({
     required String deviceId,
     required String authToken,
@@ -36,8 +62,11 @@ class CommandService {
   }) async {
     try {
       final headers = await _getHeaders(authToken);
+      final url = '$_baseUrl/commands/capture-photo';
+      print('Calling API: $url');
+
       final response = await http.post(
-        Uri.parse('$_baseUrl/commands/capture-photo'),
+        Uri.parse(url),
         headers: headers,
         body: json.encode({'device_id': deviceId, 'front_camera': frontCamera}),
       );
@@ -48,35 +77,40 @@ class CommandService {
     }
   }
 
+  /// Send screen capture command
   Future<Map<String, dynamic>> screenCapture({
     required String deviceId,
     required String authToken,
   }) async {
     try {
       final headers = await _getHeaders(authToken);
+      final url = '$_baseUrl/commands/screen-capture';
+      print('Calling API: $url');
+
       final response = await http.post(
-        Uri.parse('$_baseUrl/commands/screen-capture'),
+        Uri.parse(url),
         headers: headers,
         body: json.encode({'device_id': deviceId}),
       );
 
       return _handleResponse(response);
     } catch (e) {
-      throw Exception('Failed to capture photo: $e');
+      throw Exception('Failed to capture screen: $e');
     }
   }
 
   /// Send request location command
-  ///
-  /// [deviceId] - Target device ID
   Future<Map<String, dynamic>> requestLocation({
     required String deviceId,
     required String authToken,
   }) async {
     try {
       final headers = await _getHeaders(authToken);
+      final url = '$_baseUrl/commands/request-location';
+      print('Calling API: $url');
+
       final response = await http.post(
-        Uri.parse('$_baseUrl/commands/request-location'),
+        Uri.parse(url),
         headers: headers,
         body: json.encode({'device_id': deviceId}),
       );
@@ -88,16 +122,17 @@ class CommandService {
   }
 
   /// Send start monitoring command
-  ///
-  /// [deviceId] - Target device ID
   Future<Map<String, dynamic>> startMonitoring({
     required String deviceId,
     required String authToken,
   }) async {
     try {
       final headers = await _getHeaders(authToken);
+      final url = '$_baseUrl/commands/start-monitoring';
+      print('Calling API: $url');
+
       final response = await http.post(
-        Uri.parse('$_baseUrl/commands/start-monitoring'),
+        Uri.parse(url),
         headers: headers,
         body: json.encode({'device_id': deviceId}),
       );
@@ -109,16 +144,17 @@ class CommandService {
   }
 
   /// Send stop monitoring command
-  ///
-  /// [deviceId] - Target device ID
   Future<Map<String, dynamic>> stopMonitoring({
     required String deviceId,
     required String authToken,
   }) async {
     try {
       final headers = await _getHeaders(authToken);
+      final url = '$_baseUrl/commands/stop-monitoring';
+      print('Calling API: $url');
+
       final response = await http.post(
-        Uri.parse('$_baseUrl/commands/stop-monitoring'),
+        Uri.parse(url),
         headers: headers,
         body: json.encode({'device_id': deviceId}),
       );
@@ -130,16 +166,17 @@ class CommandService {
   }
 
   /// Send start screen monitor command
-  ///
-  /// [deviceId] - Target device ID
   Future<Map<String, dynamic>> startScreenMonitor({
     required String deviceId,
     required String authToken,
   }) async {
     try {
       final headers = await _getHeaders(authToken);
+      final url = '$_baseUrl/commands/start-screen-monitor';
+      print('Calling API: $url');
+
       final response = await http.post(
-        Uri.parse('$_baseUrl/commands/start-screen-monitor'),
+        Uri.parse(url),
         headers: headers,
         body: json.encode({'device_id': deviceId}),
       );
@@ -151,16 +188,17 @@ class CommandService {
   }
 
   /// Send stop screen monitor command
-  ///
-  /// [deviceId] - Target device ID
   Future<Map<String, dynamic>> stopScreenMonitor({
     required String deviceId,
     required String authToken,
   }) async {
     try {
       final headers = await _getHeaders(authToken);
+      final url = '$_baseUrl/commands/stop-screen-monitor';
+      print('Calling API: $url');
+
       final response = await http.post(
-        Uri.parse('$_baseUrl/commands/stop-screen-monitor'),
+        Uri.parse(url),
         headers: headers,
         body: json.encode({'device_id': deviceId}),
       );
@@ -172,9 +210,6 @@ class CommandService {
   }
 
   /// Send custom command
-  ///
-  /// [deviceId] - Target device ID
-  /// [command] - Command object with type and additional data
   Future<Map<String, dynamic>> sendCustomCommand({
     required String deviceId,
     required String authToken,
@@ -182,8 +217,11 @@ class CommandService {
   }) async {
     try {
       final headers = await _getHeaders(authToken);
+      final url = '$_baseUrl/commands/custom';
+      print('Calling API: $url');
+
       final response = await http.post(
-        Uri.parse('$_baseUrl/commands/custom'),
+        Uri.parse(url),
         headers: headers,
         body: json.encode({'device_id': deviceId, 'command': command}),
       );
@@ -195,16 +233,17 @@ class CommandService {
   }
 
   /// Broadcast command to all parent's devices
-  ///
-  /// [command] - Command object with type and additional data
   Future<Map<String, dynamic>> broadcastCommand({
     required Map<String, dynamic> command,
     required String authToken,
   }) async {
     try {
       final headers = await _getHeaders(authToken);
+      final url = '$_baseUrl/commands/broadcast';
+      print('Calling API: $url');
+
       final response = await http.post(
-        Uri.parse('$_baseUrl/commands/broadcast'),
+        Uri.parse(url),
         headers: headers,
         body: json.encode({'command': command}),
       );
@@ -216,16 +255,17 @@ class CommandService {
   }
 
   /// Test FCM token validity
-  ///
-  /// [deviceId] - Target device ID
   Future<Map<String, dynamic>> testFcmToken({
     required String deviceId,
     required String authToken,
   }) async {
     try {
       final headers = await _getHeaders(authToken);
+      final url = '$_baseUrl/commands/test-fcm-token';
+      print('Calling API: $url');
+
       final response = await http.post(
-        Uri.parse('$_baseUrl/commands/test-fcm-token'),
+        Uri.parse(url),
         headers: headers,
         body: json.encode({'device_id': deviceId}),
       );
@@ -236,54 +276,3 @@ class CommandService {
     }
   }
 }
-
-// Example usage in your app
-// 
-// final commandService = CommandService(baseUrl: 'https://your.com');
-//
-// // Capture photo with front camera
-// try {
-//   final result = await commandService.capturePhoto(
-//     deviceId: 'device_123',
-//     frontCamera: true,
-//   );
-//   print('Command sent: ${result['message']}');
-// } catch (e) {
-//   print('Error: $e');
-// }
-//
-// // Request location
-// try {
-//   final result = await commandService.requestLocation(
-//     deviceId: 'device_123',
-//   );
-//   print('Location requested: ${result['success']}');
-// } catch (e) {
-//   print('Error: $e');
-// }
-//
-// // Send custom command
-// try {
-//   final result = await commandService.sendCustomCommand(
-//     deviceId: 'device_123',
-//     command: {
-//       'type': 'vibrate',
-//       'duration': 1000,
-//     },
-//   );
-//   print('Custom command sent');
-// } catch (e) {
-//   print('Error: $e');
-// }
-//
-// // Broadcast to all devices
-// try {
-//   final result = await commandService.broadcastCommand(
-//     command: {
-//       'type': 'sync',
-//     },
-//   );
-//   print('Broadcast result: ${result['message']}');
-// } catch (e) {
-//   print('Error: $e');
-// }
